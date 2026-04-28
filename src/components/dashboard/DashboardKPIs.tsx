@@ -1,0 +1,69 @@
+import { CITY_SDG_SCORES } from "@/data/sdgData";
+import { TrendingUp, Award, AlertTriangle, BarChart3 } from "lucide-react";
+
+export default function DashboardKPIs() {
+  const cities = CITY_SDG_SCORES;
+  const avgCsi = (cities.reduce((s, c) => s + c.csi, 0) / cities.length).toFixed(1);
+  const topCity = [...cities].sort((a, b) => b.csi - a.csi)[0];
+  const bottomCity = [...cities].sort((a, b) => a.csi - b.csi)[0];
+  const aboveTarget = cities.filter(c => c.csi >= 70).length;
+
+  const kpis = [
+    {
+      label: "Average CSI Score",
+      value: avgCsi,
+      unit: "/ 100",
+      sub: "Across 44 EU cities",
+      icon: <BarChart3 className="w-5 h-5" />,
+      color: "text-blue-600",
+      bg: "bg-blue-50",
+    },
+    {
+      label: "Top Performing City",
+      value: topCity.city,
+      unit: `CSI ${topCity.csi}`,
+      sub: topCity.cluster,
+      icon: <Award className="w-5 h-5" />,
+      color: "text-green-600",
+      bg: "bg-green-50",
+    },
+    {
+      label: "Cities Above Threshold",
+      value: `${aboveTarget}`,
+      unit: "of 44",
+      sub: "CSI ≥ 70 (strong performance)",
+      icon: <TrendingUp className="w-5 h-5" />,
+      color: "text-indigo-600",
+      bg: "bg-indigo-50",
+    },
+    {
+      label: "Needs Attention",
+      value: bottomCity.city,
+      unit: `CSI ${bottomCity.csi}`,
+      sub: `${bottomCity.country} · ${bottomCity.cluster}`,
+      icon: <AlertTriangle className="w-5 h-5" />,
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {kpis.map(kpi => (
+        <div key={kpi.label} className="kpi-card animate-fade-up">
+          <div className="flex items-start justify-between mb-3">
+            <div className={`w-9 h-9 rounded-lg ${kpi.bg} ${kpi.color} flex items-center justify-center`}>
+              {kpi.icon}
+            </div>
+          </div>
+          <div className="text-2xl font-bold font-display text-foreground leading-none">
+            {kpi.value}
+          </div>
+          <div className="text-sm font-medium text-muted-foreground mt-0.5">{kpi.unit}</div>
+          <div className="text-xs text-muted-foreground mt-2 border-t border-border pt-2">{kpi.sub}</div>
+          <p className="text-xs font-medium text-foreground mt-1">{kpi.label}</p>
+        </div>
+      ))}
+    </div>
+  );
+}

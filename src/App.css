@@ -1,0 +1,5 @@
+/* App-level layout reset — all styling via Tailwind + index.css */
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
