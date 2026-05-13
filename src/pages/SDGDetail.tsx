@@ -282,9 +282,17 @@ export default function SDGDetail() {
             <button key={t} onClick={() => setTab(t)}
               className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 whitespace-nowrap transition-all ${tab===t?"border-blue-600 text-blue-700":"border-transparent text-slate-400 hover:text-slate-700"}`}
             >
-              <Icon className="w-3.5 h-3.5"/>
-              {t}
-              {isAnomaly && <span className="ml-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">{anomalies.length}</span>}
+              <div className="flex items-center gap-1.5">
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  (t === "Rankings") || 
+                  ((t === "Overview" || t === "Forecast") && [5, 6, 7].includes(sdg.id))
+                    ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
+                    : "bg-red-500"
+                }`} />
+                <Icon className="w-3.5 h-3.5"/>
+                {t}
+              </div>
+              {isAnomaly && <span className="ml-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center font-bold">{anomalies.length}</span>}
             </button>
           );
         })}
