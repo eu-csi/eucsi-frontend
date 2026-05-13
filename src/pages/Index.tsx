@@ -71,11 +71,22 @@ function useAllCountries() {
     staleTime: 1000 * 60 * 10,
     retry: 1,
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/cities`);
+      // Backend doesn't have /api/cities yet, so we'll use /countries to get names
+      // and keep rankings static for now, or fetch them if an endpoint existed.
+      const res = await fetch(`${API_BASE}/countries`);
       if (!res.ok) throw new Error(`API ${res.status}`);
       const data = await res.json();
-      const arr: LiveCountryRecord[] = Array.isArray(data) ? data : data.countries ?? [];
-      return arr.sort((a, b) => a.rank - b.rank);
+      const countryNames: string[] = data.countries || [];
+      
+      // Map names to our static records to preserve coordinates/clusters
+      // but mark them as potentially ready for live updates
+      return COUNTRY_SDG_SCORES.filter(c => countryNames.includes(c.country))
+        .map((c, i) => ({
+          ...c,
+          rank: i + 1,
+          metrics: {},
+          year: 2024
+        } as LiveCountryRecord));
     },
   });
 }
@@ -109,10 +120,27 @@ function useCountryOverview(countryName: string | null) {
     retry: 1,
     queryFn: async () => {
       const res = await fetch(
-        `${API_BASE}/api/cities/${encodeURIComponent(countryName!)}/overview`
+        `${API_BASE}/sdg-scores/${encodeURIComponent(countryName!)}`
       );
       if (!res.ok) throw new Error(`API ${res.status}`);
-      return res.json();
+      const data = await res.json();
+      
+      // Transform sdgScores from {sdg5: {score: 70}} to {5: 70}
+      const mappedScores: Record<number, number | null> = {};
+      Object.entries(data.sdgScores).forEach(([key, val]: [string, any]) => {
+        const id = parseInt(key.replace("sdg", ""));
+        mappedScores[id] = val.score;
+      });
+
+      return {
+        country: data.country,
+        csi: data.compositeCsi,
+        percentile: 0, // Backend doesn't return percentile yet
+        sdgAchievementRate: 0, // Calculated in frontend usually
+        cluster: "Western Innovators" as ClusterName, // Backend doesn't return cluster
+        sdgScores: mappedScores,
+        timestamp: data.timestamp,
+      };
     },
   });
 }

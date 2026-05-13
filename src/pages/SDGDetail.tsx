@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ChevronLeft, ChevronRight, Database, TrendingUp, TrendingDown,
-  Info, BarChart2, Table2, BookOpen, Minus, AlertTriangle, Zap, Target,
+  Info, BarChart2, Table2, BookOpen, Minus, AlertTriangle, Zap, Target, RefreshCw,
 } from "lucide-react";
 import {
   SDG_DEFINITIONS, COUNTRY_SDG_SCORES, getTopCountriesForSdg, generateSdgTrendData,
@@ -10,8 +10,9 @@ import {
 import {
   generateForecastData, detectAnomalies, getBenchmarks, SDG_FORECAST_LABELS,
 } from "@/data/analyticsData";
-import { useSDGScores } from "@/services/sdgScoresApi";
-import { useMemo } from "react";
+import { useSDGScores, fetchIndicatorData } from "@/services/sdgScoresApi";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useEffect } from "react";
 import {
   AreaChart, Area, BarChart, Bar, ComposedChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -171,6 +172,43 @@ export default function SDGDetail() {
   const topCountries    = getTopCountriesForSdg(sdg.id, 12);
   const forecastLabel = SDG_FORECAST_LABELS[sdg.id];
 
+  // ─── Live Forecast Hook ──────────────────────────────────────────────────
+  const indicatorMap: Record<number, string> = { 5: "gender_gap", 6: "WEI_plus", 7: "RES_total_pct" };
+  const indicator = indicatorMap[sdg.id];
+
+  const { data: liveForecast, isLoading: forecastLoading } = useQuery({
+    queryKey: ["indicator-forecast", indicator, country],
+    queryFn: () => fetchIndicatorData(indicator!, country, 2015, 2030),
+    enabled: !!indicator && tab === "Forecast",
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const mergedForecastData = useMemo(() => {
+    if (!liveForecast?.data || !indicator) return forecastData;
+    
+    // Transform backend data [{date: "2024-01-01", value: 70, is_forecast: false}] 
+    // to chart format [{year: 2024, actual: 70}]
+    const points: Record<number, any> = {};
+    liveForecast.data.forEach((d: any) => {
+      const year = new Date(d.date).getFullYear();
+      if (!points[year]) points[year] = { year };
+      
+      if (d.is_forecast) {
+        points[year].projected = d.value;
+        points[year].isProjected = true;
+        // Mocking bands if not provided by backend for simplicity
+        points[year].upper = d.value * 1.05;
+        points[year].lower = d.value * 0.95;
+      } else {
+        points[year].actual = d.value;
+      }
+      points[year].target = forecastData[0]?.target;
+      points[year].eu27 = forecastData.find(f => f.year === year)?.eu27;
+    });
+
+    return Object.values(points).sort((a, b) => a.year - b.year);
+  }, [liveForecast, forecastData, indicator]);
+
   return (
     <div className="px-6 py-6 max-w-screen-xl mx-auto space-y-5">
 
@@ -321,9 +359,17 @@ export default function SDGDetail() {
             </div>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl p-6">
-            <ResponsiveContainer width="100%" height={340}>
-              <ComposedChart data={forecastData} margin={{ top:10, right:20, left:0, bottom:0 }}>
+          <div className="bg-white border border-slate-200 rounded-xl p-6 min-h-[400px] flex flex-col">
+            {forecastLoading ? (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <RefreshCw className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-2" />
+                  <p className="text-sm text-slate-500">Generating ML Forecast...</p>
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={340}>
+                <ComposedChart data={mergedForecastData} margin={{ top:10, right:20, left:0, bottom:0 }}>
                 <defs>
                   <linearGradient id="ci-band" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.15}/>
@@ -350,13 +396,14 @@ export default function SDGDetail() {
                 <Line dataKey="projected" name={`${country} (forecast)`} stroke={sdg.color} strokeWidth={2} strokeDasharray="7 4" dot={{ r:2.5, fill:sdg.color, stroke:"white", strokeWidth:1 }} connectNulls/>
               </ComposedChart>
             </ResponsiveContainer>
+            )}
           </div>
 
           {/* 2030 target progress */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[{ label:"Current Score (2024)", val: forecastData.find(d=>d.year===2024)?.actual?.toFixed(1), color: sdg.color },
-              { label:"Projected Score (2030)", val: forecastData.find(d=>d.year===2030)?.projected?.toFixed(1), color: "#2563eb" },
-              { label:"EU 2030 Target", val: forecastData[0]?.target?.toFixed(1) ?? "N/A", color: "#d97706" }
+            {[{ label:"Current Score (2024)", val: mergedForecastData.find(d=>d.year===2024)?.actual?.toFixed(1), color: sdg.color },
+              { label:"Projected Score (2030)", val: mergedForecastData.find(d=>d.year===2030)?.projected?.toFixed(1), color: "#2563eb" },
+              { label:"EU 2030 Target", val: mergedForecastData[0]?.target?.toFixed(1) ?? "N/A", color: "#d97706" }
             ].map(item => (
               <div key={item.label} className="bg-white border border-slate-200 rounded-xl p-4 text-center">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{item.label}</p>
@@ -378,7 +425,7 @@ export default function SDGDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {forecastData.filter(d=>d.isProjected).map((d,i)=>(
+                  {mergedForecastData.filter(d=>d.isProjected).map((d,i)=>(
                     <tr key={d.year} className={i%2===0?"bg-white":"bg-slate-50/50"}>
                       <td className="px-4 py-2.5 font-bold text-slate-700">{d.year}</td>
                       <td className="px-4 py-2.5"><span className="font-bold" style={{ color:sdg.color }}>{d.projected?.toFixed(1)}</span></td>

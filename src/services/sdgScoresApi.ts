@@ -1,9 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 // Use environment variable for API base URL
-// For development: https://187.127.164.121:8000 or http://localhost:8000
-// For production: Use HTTPS endpoint and set VITE_API_BASE_URL in environment
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://187.127.164.121:8000"; // No trailing slash
+const API_BASE = import.meta.env.VITE_API_URL || "https://187.127.164.121:8000";
 
 export interface SDGScore {
   id: number;
@@ -30,9 +28,26 @@ export interface SDGScoresResponse {
  * Fetch composite SDG scores for a given country
  */
 export async function fetchSDGScores(country: string): Promise<SDGScoresResponse> {
-  const response = await fetch(`${API_BASE}/api/cities/${encodeURIComponent(country)}/overview`);
+  const response = await fetch(`${API_BASE}/sdg-scores/${encodeURIComponent(country)}`);
   if (!response.ok) {
     throw new Error(`Failed to fetch SDG scores: ${response.statusText}`);
+  }
+  return response.json();
+}
+
+/**
+ * Fetch historical/forecast data for a specific indicator
+ */
+export async function fetchIndicatorData(
+  indicator: string,
+  country: string,
+  startYear: number = 2015,
+  endYear: number = 2030
+) {
+  const url = `${API_BASE}/data/${indicator}?country=${encodeURIComponent(country)}&start_year=${startYear}&end_year=${endYear}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch indicator data: ${response.statusText}`);
   }
   return response.json();
 }
