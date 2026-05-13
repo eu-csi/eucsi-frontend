@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { LiveCountryRecord } from "@/types/countryTypes";
 
 // ─── ENV ─────────────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8000";
+const API_BASE = import.meta.env.VITE_API_URL ?? "https://187.127.164.121:8000";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 export type ClusterName =

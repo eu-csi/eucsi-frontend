@@ -15,7 +15,7 @@ import type { LiveCountryRecord } from "@/types/countryTypes";
 import { COUNTRY_SDG_SCORES, SDG_DEFINITIONS } from "@/data/sdgData";
 
 // ─── Config ────────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8000";
+const API_BASE = import.meta.env.VITE_API_URL ?? "https://187.127.164.121:8000";
 
 /** SDGs the Python/FastAPI backend currently serves live historical data for */
 const LIVE_SDG_IDS = new Set([5, 6, 7]);
