@@ -17,6 +17,7 @@ import { COUNTRY_SDG_SCORES, SDG_DEFINITIONS } from "@/data/sdgData";
 import CountryMap from "@/components/dashboard/CountryMap";
 import CountryRankingTable from "@/components/dashboard/CountryRankingTable";
 import SDGScoreGrid from "@/components/dashboard/SDGScoreGrid";
+import { useAllCountries, useSDGScores } from "@/services/sdgScoresApi";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // ── Shared type — imported from countryTypes ──
@@ -65,31 +66,6 @@ function scoreColor(s: number): string {
 }
 
 // ─── LIVE API HOOKS ───────────────────────────────────────────────────────────
-function useAllCountries() {
-  return useQuery<LiveCountryRecord[]>({
-    queryKey: ["all-countries"],
-    staleTime: 1000 * 60 * 10,
-    retry: 1,
-    queryFn: async () => {
-      // Backend doesn't have /api/cities yet, so we'll use /countries to get names
-      // and keep rankings static for now, or fetch them if an endpoint existed.
-      const res = await fetch(`${API_BASE}/countries`);
-      if (!res.ok) throw new Error(`API ${res.status}`);
-      const data = await res.json();
-      const countryNames: string[] = data.countries || [];
-      
-      // Map names to our static records to preserve coordinates/clusters
-      // but mark them as potentially ready for live updates
-      return COUNTRY_SDG_SCORES.filter(c => countryNames.includes(c.country))
-        .map((c, i) => ({
-          ...c,
-          rank: i + 1,
-          metrics: {},
-          year: 2024
-        } as LiveCountryRecord));
-    },
-  });
-}
 
 function useApiHealth() {
   return useQuery<ApiHealthResponse>({

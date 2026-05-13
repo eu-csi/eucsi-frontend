@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ChevronLeft, ChevronRight, Database, TrendingUp, TrendingDown,
@@ -10,9 +10,8 @@ import {
 import {
   generateForecastData, detectAnomalies, getBenchmarks, SDG_FORECAST_LABELS,
 } from "@/data/analyticsData";
-import { useSDGScores, fetchIndicatorData } from "@/services/sdgScoresApi";
+import { useSDGScores, useAllCountries } from "@/services/sdgScoresApi";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useEffect } from "react";
 import {
   AreaChart, Area, BarChart, Bar, ComposedChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -172,7 +171,40 @@ export default function SDGDetail() {
   const forecastData = generateForecastData(sdg.id, country);
   const anomalies    = detectAnomalies(sdg.id, country);
   const benchmarks   = getBenchmarks(sdg.id, country);
-  const topCountries    = getTopCountriesForSdg(sdg.id, 12);
+  const { data: allCountriesLive } = useAllCountries();
+
+  const topCountries = useMemo(() => {
+    const staticTop = getTopCountriesForSdg(sdg.id, 12);
+    if (!allCountriesLive) return staticTop;
+
+    // Compute live ranking from all-countries data
+    const sorted = [...allCountriesLive]
+      .filter(c => {
+        const s = Object.values(c.sdgScores).find(s => s.id === sdg.id);
+        return s && s.score !== null;
+      })
+      .sort((a, b) => {
+        const scoreA = Object.values(a.sdgScores).find(s => s.id === sdg.id)?.score ?? 0;
+        const scoreB = Object.values(b.sdgScores).find(s => s.id === sdg.id)?.score ?? 0;
+        return scoreB - scoreA;
+      })
+      .slice(0, 12);
+
+    if (sorted.length === 0) return staticTop;
+
+    return sorted.map((c, i) => {
+      const score = Object.values(c.sdgScores).find(s => s.id === sdg.id)?.score ?? 0;
+      // Match static cluster data for visual consistency
+      const staticMatch = COUNTRY_SDG_SCORES.find(s => s.country === c.country);
+      return {
+        country: c.country,
+        score,
+        cluster: staticMatch?.cluster ?? "European Region",
+        rank: i + 1
+      };
+    });
+  }, [allCountriesLive, sdg.id]);
+
   const forecastLabel = SDG_FORECAST_LABELS[sdg.id];
 
   // ─── Live Forecast Hook ──────────────────────────────────────────────────
@@ -615,17 +647,52 @@ export default function SDGDetail() {
                 {["#","Country","Code","SDG Score","CSI","Cluster"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{h}</th>)}
               </tr></thead>
               <tbody>
-                {[...COUNTRY_SDG_SCORES].sort((a,b)=>(b.sdgScores[sdg.id]??0)-(a.sdgScores[sdg.id]??0)).map((c,i)=>{
-                  const s = c.sdgScores[sdg.id]??0;
+                {(allCountriesLive || COUNTRY_SDG_SCORES).map((c: any) => {
+                  // Standardize the score access
+                  let s = 0;
+                  let composite = 0;
+                  if ('compositeCsi' in c) {
+                    // It's a live record
+                    const liveScoreObj = Object.values(c.sdgScores).find((item: any) => item.id === sdg.id) as any;
+                    s = liveScoreObj?.score ?? 0;
+                    composite = c.compositeCsi ?? 0;
+                  } else {
+                    // It's a static record
+                    s = c.sdgScores[sdg.id] ?? 0;
+                    composite = c.csi ?? 0;
+                  }
+                  return { ...c, currentSdgScore: s, currentComposite: composite };
+                })
+                .sort((a, b) => b.currentSdgScore - a.currentSdgScore)
+                .map((c, i) => {
+                  const s = c.currentSdgScore;
                   const col = scoreColor(s);
+                  const isLive = [5, 6, 7].includes(sdg.id) && !!allCountriesLive;
+                  
                   return (
                     <tr key={c.country} onClick={()=>setCountry(c.country)} className={`border-b border-slate-50 cursor-pointer transition-colors ${c.country===country?"bg-blue-50":"hover:bg-slate-50"}`}>
-                      <td className="px-4 py-3 text-xs text-slate-400 font-mono">{i+1}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400 font-mono">
+                        <div className="flex items-center gap-1.5">
+                          {isLive && <div className="w-1 h-1 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" />}
+                          {i+1}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{c.country}</td>
                       <td className="px-4 py-3"><span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{c.countryCode}</span></td>
-                      <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width:`${s}%`, background:col }}/></div><span className="text-sm font-bold" style={{ color:col }}>{s}</span></div></td>
-                      <td className="px-4 py-3"><span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{ background:`${scoreColor(c.csi)}15`, color:scoreColor(c.csi) }}>{c.csi.toFixed(1)}</span></td>
-                      <td className="px-4 py-3 text-xs text-slate-400">{c.cluster}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-500" style={{ width:`${s}%`, background:col }}/>
+                          </div>
+                          <span className="text-sm font-bold" style={{ color:col }}>{s}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{ background:`${scoreColor(c.currentComposite)}15`, color:scoreColor(c.currentComposite) }}>
+                          {c.currentComposite.toFixed(1)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-400">{c.cluster || "EU Region"}</td>
                     </tr>
                   );
                 })}

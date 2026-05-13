@@ -102,9 +102,29 @@ export default function CountryRankingTable({
 
   const sorted = useMemo(() => {
     // Use live countries if provided, otherwise fall back to mock data
-    let data = liveCountries && liveCountries.length > 0 
-      ? liveCountries 
-      : [...COUNTRY_SDG_SCORES];
+    let data = (liveCountries && liveCountries.length > 0)
+      ? liveCountries.map(c => {
+          // If it's the backend response structure, map it
+          if ('compositeCsi' in c) {
+            const staticMatch = COUNTRY_SDG_SCORES.find(s => s.country === c.country);
+            return {
+              country: c.country,
+              countryCode: c.countryCode,
+              csi: c.compositeCsi ?? 0,
+              percentile: staticMatch?.percentile ?? 50,
+              sdgAchievementRate: staticMatch?.sdgAchievementRate ?? 0,
+              cluster: staticMatch?.cluster ?? "EU Region",
+              isLive: true,
+              sdgScores: Object.entries(c.sdgScores).reduce((acc: any, [key, val]: [string, any]) => {
+                const id = parseInt(key.replace('sdg', ''));
+                acc[id] = val.score;
+                return acc;
+              }, {})
+            };
+          }
+          return { ...c, isLive: false };
+        })
+      : COUNTRY_SDG_SCORES.map(c => ({ ...c, isLive: false }));
 
     // Filter by search
     if (search.trim()) {
@@ -266,7 +286,12 @@ export default function CountryRankingTable({
                   >
                     {/* Rank */}
                     <td className="px-3 py-2.5 text-center text-slate-400 font-mono text-[11px]">
-                      {idx + 1}
+                      <div className="flex items-center justify-center gap-1.5">
+                        {country.isLive && (
+                          <div className="w-1 h-1 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" />
+                        )}
+                        {idx + 1}
+                      </div>
                     </td>
 
                     {/* Country */}
