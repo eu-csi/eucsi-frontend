@@ -5,11 +5,13 @@ import {
   Info, BarChart2, Table2, BookOpen, Minus, AlertTriangle, Zap, Target,
 } from "lucide-react";
 import {
-  SDG_DEFINITIONS, CITY_SDG_SCORES, getTopCitiesForSdg, generateSdgTrendData,
+  SDG_DEFINITIONS, COUNTRY_SDG_SCORES, getTopCountriesForSdg, generateSdgTrendData,
 } from "@/data/sdgData";
 import {
   generateForecastData, detectAnomalies, getBenchmarks, SDG_FORECAST_LABELS,
 } from "@/data/analyticsData";
+import { useSDGScores } from "@/services/sdgScoresApi";
+import { useMemo } from "react";
 import {
   AreaChart, Area, BarChart, Bar, ComposedChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -24,9 +26,9 @@ function scoreColor(s: number) {
   return "#dc2626";
 }
 
-function getMockMetricValues(sdgId: number, city: string): Record<string, { value: string | number; trend?: number; benchmark?: number; category?: string }> {
-  const cityData = CITY_SDG_SCORES.find(c => c.city === city);
-  const score = cityData?.sdgScores[sdgId] ?? 65;
+function getMockMetricValues(sdgId: number, country: string): Record<string, { value: string | number; trend?: number; benchmark?: number; category?: string }> {
+  const countryData = COUNTRY_SDG_SCORES.find(c => c.country === country);
+  const score = countryData?.sdgScores[sdgId] ?? 65;
   const m = score / 100;
   const maps: Record<number, Record<string, any>> = {
     5:  { genderEmploymentGap: { value: +(22-m*18).toFixed(1), trend: -0.4, benchmark: 10.1 }, femaleEmploymentRate: { value: +(45+m*40).toFixed(1), trend: 1.2, benchmark: 68.4 }, genderGapTrend: { value: +(-0.9+m*0.8).toFixed(2), trend: 0.1, benchmark: -0.2 } },
@@ -39,7 +41,7 @@ function getMockMetricValues(sdgId: number, city: string): Record<string, { valu
     17: { datasetCoverage: { value: +(60+m*40).toFixed(1), trend: 2.1, benchmark: 78.4 }, dataFreshnessIndex: { value: +(3-m*2.2).toFixed(1), trend: -0.3, benchmark: 1.8 }, openDataCompliance: { value: +(70+m*30).toFixed(1), trend: 0.0, benchmark: 88.4 }, crossSdgCoverage: { value: Math.round(6+m*7), trend: 0.0, benchmark: 9.2 } },
     3:  { healthRiskScore: { value: +(80-m*65).toFixed(1), trend: -3.2, benchmark: 42.1 }, airPollutionExposure: { value: +(35-m*28).toFixed(1), trend: -2.1, benchmark: 18.3 }, greenSpaceDeficit: { value: +Math.max(0,9-(4+m*25)).toFixed(1), trend: -0.2, benchmark: 3.8 } },
     9:  { infrastructureModernity: { value: +(30+m*65).toFixed(1), trend: 2.8, benchmark: 58.3 }, energyProductivity: { value: +(3+m*8).toFixed(1), trend: 0.6, benchmark: 6.2 }, transportInfraScore: { value: +(25+m*65).toFixed(1), trend: 3.1, benchmark: 52.4 } },
-    10: { genderEmploymentGap: { value: +(22-m*18).toFixed(1), trend: -0.4, benchmark: 10.1 }, gdpDisparityIndex: { value: +Math.abs(50-m*80).toFixed(1), trend: -1.2, benchmark: 18.2 }, interCityInequalityScore: { value: +(35-m*28).toFixed(1), trend: -0.8, benchmark: 14.2 } },
+    10: { genderEmploymentGap: { value: +(22-m*18).toFixed(1), trend: -0.4, benchmark: 10.1 }, gdpDisparityIndex: { value: +Math.abs(50-m*80).toFixed(1), trend: -1.2, benchmark: 18.2 }, interCountryInequalityScore: { value: +(35-m*28).toFixed(1), trend: -0.8, benchmark: 14.2 } },
     15: { urbanGreenCoverage: { value: +(15+m*35).toFixed(1), trend: 1.2, benchmark: 28.4 }, greenSpacePerCapita: { value: +(4+m*25).toFixed(1), trend: 0.8, benchmark: 14.2 }, greenInfraGap: { value: +Math.max(0,40-(15+m*35)).toFixed(1), trend: -0.6, benchmark: 11.6 }, urbanBiodiversityProxy: { value: +(25+m*65).toFixed(1), trend: 2.1, benchmark: 52.3 } },
   };
   return maps[sdgId] ?? {};
@@ -114,31 +116,59 @@ function MetricBlock({ metric, vals, color }: any) {
   );
 }
 
-const TABS = ["Overview", "Forecast", "Benchmarks", "Anomalies", "City Rankings", "Metric Guide"] as const;
+const TABS = ["Overview", "Forecast", "Benchmarks", "Anomalies", "Country Rankings", "Metric Guide"] as const;
 type Tab = typeof TABS[number];
-const TAB_ICONS = { Overview: BarChart2, Forecast: Zap, Benchmarks: Target, Anomalies: AlertTriangle, "City Rankings": Table2, "Metric Guide": BookOpen };
+const TAB_ICONS = { Overview: BarChart2, Forecast: Zap, Benchmarks: Target, Anomalies: AlertTriangle, "Country Rankings": Table2, "Metric Guide": BookOpen };
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function SDGDetail() {
   const { sdgSlug } = useParams<{ sdgSlug: string }>();
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("Overview");
-  const [city, setCity] = useState("Stockholm");
+  const [country, setCountry] = useState("Sweden");
 
   const sdg = SDG_DEFINITIONS.find(s => s.slug === sdgSlug);
   if (!sdg) return <div className="flex items-center justify-center py-24 text-slate-500"><div className="text-center"><p className="font-bold text-xl mb-2">SDG not found</p><Link to="/" className="text-blue-600">← Dashboard</Link></div></div>;
+
+  const { data: liveData, isLoading: liveLoading, isError: liveError } = useSDGScores(country);
 
   const allSdgs = SDG_DEFINITIONS;
   const idx = allSdgs.findIndex(s => s.slug === sdgSlug);
   const prevSdg = allSdgs[idx-1], nextSdg = allSdgs[idx+1];
 
-  const cityRow  = CITY_SDG_SCORES.find(c => c.city === city);
-  const metricVals = getMockMetricValues(sdg.id, city);
-  const trendData  = generateSdgTrendData(sdg.id, city);
-  const forecastData = generateForecastData(sdg.id, city);
-  const anomalies    = detectAnomalies(sdg.id, city);
-  const benchmarks   = getBenchmarks(sdg.id, city);
-  const topCities    = getTopCitiesForSdg(sdg.id, 12);
+  const countryRow  = COUNTRY_SDG_SCORES.find(c => c.country === country);
+  
+  // Merge live metrics with mock metrics
+  const metricVals = useMemo(() => {
+    const base = getMockMetricValues(sdg.id, country);
+    if (!liveData?.sdgScores) return base;
+
+    // Find the score for the current SDG
+    const liveSdg = Object.values(liveData.sdgScores).find(s => s.id === sdg.id);
+    if (!liveSdg?.metrics) return base;
+
+    const merged = { ...base };
+    for (const [key, val] of Object.entries(liveSdg.metrics)) {
+      if (merged[key]) {
+        merged[key] = { ...merged[key], value: val };
+      }
+    }
+    return merged;
+  }, [liveData, country, sdg.id]);
+
+  const liveSdgScore = useMemo(() => {
+    if (!liveData?.sdgScores) return null;
+    const s = Object.values(liveData.sdgScores).find(s => s.id === sdg.id);
+    return s?.score ?? null;
+  }, [liveData, sdg.id]);
+
+  const displayScore = liveSdgScore ?? countryRow?.sdgScores[sdg.id] ?? 0;
+
+  const trendData  = generateSdgTrendData(sdg.id, country);
+  const forecastData = generateForecastData(sdg.id, country);
+  const anomalies    = detectAnomalies(sdg.id, country);
+  const benchmarks   = getBenchmarks(sdg.id, country);
+  const topCountries    = getTopCountriesForSdg(sdg.id, 12);
   const forecastLabel = SDG_FORECAST_LABELS[sdg.id];
 
   return (
@@ -173,22 +203,29 @@ export default function SDGDetail() {
               {sdg.datasets.map(d => <code key={d} className="text-[10px] bg-white/70 border border-slate-200 px-1.5 py-0.5 rounded font-mono text-slate-600">{d}</code>)}
             </div>
           </div>
-          {/* City selector */}
+          {/* Country selector */}
           <div className="bg-white/80 rounded-xl p-4 border border-slate-200/60 min-w-[190px]">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Viewing City</label>
-            <select className="w-full text-sm font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer" value={city} onChange={e => setCity(e.target.value)}>
-              {CITY_SDG_SCORES.map(c => <option key={c.city}>{c.city}</option>)}
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">Viewing Country</label>
+            <select className="w-full text-sm font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer" value={country} onChange={e => setCountry(e.target.value)}>
+              {COUNTRY_SDG_SCORES.map(c => <option key={c.country}>{c.country}</option>)}
             </select>
             <div className="mt-2 pt-2 border-t border-slate-100">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] text-slate-400">SDG Score</span>
-                <span className="text-2xl font-black font-display" style={{ color: sdg.color }}>{cityRow?.sdgScores[sdg.id] ?? "—"}</span>
-              </div>
-              {cityRow && <>
-                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
-                  <div className="h-full rounded-full" style={{ width:`${cityRow.sdgScores[sdg.id]}%`, background: sdg.color }} />
+                <div className="flex flex-col">
+                  <span className="text-[11px] text-slate-400">SDG Score</span>
+                  {liveSdgScore !== null ? (
+                    <span className="text-[9px] text-green-600 font-bold bg-green-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">● Live</span>
+                  ) : (
+                    <span className="text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">Static Cache</span>
+                  )}
                 </div>
-                <p className="text-[10px] text-slate-400 mt-1">{cityRow.cluster} · P{cityRow.percentile}</p>
+                <span className="text-2xl font-black font-display" style={{ color: sdg.color }}>{displayScore}</span>
+              </div>
+              {countryRow && <>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width:`${displayScore}%`, background: sdg.color }} />
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">{countryRow.cluster} · P{countryRow.percentile}</p>
               </>}
             </div>
           </div>
@@ -217,7 +254,7 @@ export default function SDGDetail() {
         <div className="space-y-5">
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-display font-bold text-slate-800">Key Metrics — {city}</h2>
+              <h2 className="font-display font-bold text-slate-800">Key Metrics — {country}</h2>
               <p className="text-xs text-slate-400">Click a card to expand details</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -227,7 +264,7 @@ export default function SDGDetail() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <h3 className="font-display font-semibold text-slate-800 mb-1">Score Trend 2015–2024</h3>
-              <p className="text-xs text-slate-400 mb-4">{city} vs EU27 average</p>
+              <p className="text-xs text-slate-400 mb-4">{country} vs EU27 average</p>
               <ResponsiveContainer width="100%" height={200}>
                 <AreaChart data={trendData}>
                   <defs>
@@ -241,21 +278,21 @@ export default function SDGDetail() {
                   <YAxis domain={[0,100]} tick={{ fontSize:10, fill:"#94A3B8" }} tickLine={false} axisLine={false}/>
                   <Tooltip content={<ChartTip/>}/>
                   <Area dataKey="eu27" name="EU27" stroke="#CBD5E1" fill="none" strokeWidth={1.5} dot={false}/>
-                  <Area dataKey="value" name={city} stroke={sdg.color} fill={`url(#ov${sdg.id})`} strokeWidth={2.5} dot={{ r:3, fill:sdg.color, stroke:"white", strokeWidth:1.5 }}/>
+                  <Area dataKey="value" name={country} stroke={sdg.color} fill={`url(#ov${sdg.id})`} strokeWidth={2.5} dot={{ r:3, fill:sdg.color, stroke:"white", strokeWidth:1.5 }}/>
                 </AreaChart>
               </ResponsiveContainer>
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5">
-              <h3 className="font-display font-semibold text-slate-800 mb-1">Top 6 Cities</h3>
+              <h3 className="font-display font-semibold text-slate-800 mb-1">Top 6 Countries</h3>
               <p className="text-xs text-slate-400 mb-4">Ranked by {sdg.shortTitle} score</p>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={topCities.slice(0,6)} layout="vertical" margin={{ left:0, right:40 }}>
+                <BarChart data={topCountries.slice(0,6)} layout="vertical" margin={{ left:0, right:40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false}/>
                   <XAxis type="number" domain={[0,100]} tick={{ fontSize:10, fill:"#94A3B8" }} tickLine={false} axisLine={false}/>
                   <YAxis dataKey="name" type="category" tick={{ fontSize:11, fill:"#475569", fontWeight:600 }} tickLine={false} axisLine={false} width={85}/>
                   <Tooltip content={<ChartTip/>} cursor={{ fill:"#F8FAFC" }}/>
                   <Bar dataKey="score" name="Score" radius={[0,6,6,0]} barSize={16}>
-                    {topCities.slice(0,6).map((_,i) => <Cell key={i} fill={sdg.color} fillOpacity={1-i*0.13}/>)}
+                    {topCountries.slice(0,6).map((_,i) => <Cell key={i} fill={sdg.color} fillOpacity={1-i*0.13}/>)}
                     <LabelList dataKey="score" position="right" style={{ fontSize:11, fill:"#64748B", fontWeight:700 }}/>
                   </Bar>
                 </BarChart>
@@ -308,9 +345,9 @@ export default function SDGDetail() {
                 {/* EU27 */}
                 <Line dataKey="eu27" name="EU27 Avg" stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls/>
                 {/* Actual */}
-                <Line dataKey="actual" name={`${city} (actual)`} stroke={sdg.color} strokeWidth={2.5} dot={{ r:3, fill:sdg.color, stroke:"white", strokeWidth:1.5 }} connectNulls/>
+                <Line dataKey="actual" name={`${country} (actual)`} stroke={sdg.color} strokeWidth={2.5} dot={{ r:3, fill:sdg.color, stroke:"white", strokeWidth:1.5 }} connectNulls/>
                 {/* Projected */}
-                <Line dataKey="projected" name={`${city} (forecast)`} stroke={sdg.color} strokeWidth={2} strokeDasharray="7 4" dot={{ r:2.5, fill:sdg.color, stroke:"white", strokeWidth:1 }} connectNulls/>
+                <Line dataKey="projected" name={`${country} (forecast)`} stroke={sdg.color} strokeWidth={2} strokeDasharray="7 4" dot={{ r:2.5, fill:sdg.color, stroke:"white", strokeWidth:1 }} connectNulls/>
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -364,8 +401,8 @@ export default function SDGDetail() {
             <div className="flex items-center gap-3">
               <Target className="w-5 h-5 text-green-600"/>
               <div>
-                <h2 className="font-display font-bold text-slate-800">Metric Benchmarking — {city}</h2>
-                <p className="text-xs text-slate-500 mt-0.5">Each metric compared vs EU27 average, top EU city, bottom EU city, and official targets</p>
+                <h2 className="font-display font-bold text-slate-800">Metric Benchmarking — {country}</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Each metric compared vs EU27 average, top EU country, bottom EU country, and official targets</p>
               </div>
             </div>
           </div>
@@ -379,7 +416,7 @@ export default function SDGDetail() {
               {benchmarks.map(b => {
                 const isGood = b.performanceGap >= 0;
                 const targetMet = b.targetGap != null && b.targetGap >= 0;
-                const maxVal = Math.max(b.cityValue, b.eu27Avg, b.topValue, b.euTarget??0, b.whoThreshold??0) * 1.15;
+                const maxVal = Math.max(b.countryValue, b.eu27Avg, b.topValue, b.euTarget??0, b.whoThreshold??0) * 1.15;
                 const barW = (v: number) => `${Math.min(100, (v/maxVal)*100).toFixed(1)}%`;
                 return (
                   <div key={b.metricKey} className="bg-white border border-slate-200 rounded-xl p-5">
@@ -400,10 +437,10 @@ export default function SDGDetail() {
                     {/* Comparison bars */}
                     <div className="space-y-2.5">
                       {[
-                        { label: city,          val: b.cityValue,     color: sdg.color,   bold: true },
+                        { label: country,          val: b.countryValue,     color: sdg.color,   bold: true },
                         { label: "EU27 Average", val: b.eu27Avg,       color: "#64748B",   bold: false },
-                        { label: `Best: ${b.topCity}`,    val: b.topValue,      color: "#15803d",   bold: false },
-                        { label: `Worst: ${b.bottomCity}`,val: b.bottomValue,   color: "#dc2626",   bold: false },
+                        { label: `Best: ${b.topCountry}`,    val: b.topValue,      color: "#15803d",   bold: false },
+                        { label: `Worst: ${b.bottomCountry}`,val: b.bottomValue,   color: "#dc2626",   bold: false },
                         ...(b.euTarget!=null?[{ label:"EU 2030 Target", val: b.euTarget, color:"#F59E0B", bold:false }]:[]),
                         ...(b.whoThreshold!=null?[{ label:"WHO Threshold", val: b.whoThreshold, color:"#8B5CF6", bold:false }]:[]),
                       ].map(row => (
@@ -431,7 +468,7 @@ export default function SDGDetail() {
             <div className="flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-red-500"/>
               <div>
-                <h2 className="font-display font-bold text-slate-800">Anomaly Detection — {city}</h2>
+                <h2 className="font-display font-bold text-slate-800">Anomaly Detection — {country}</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Statistical outliers (Z-score &gt;1.4σ) and known event-driven irregularities in historical data</p>
               </div>
               <span className="ml-auto text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full">{anomalies.length} detected</span>
@@ -453,7 +490,7 @@ export default function SDGDetail() {
                     label={{ value:"⚠", position:"top", fontSize:12 }}/>
                 ))}
                 <Area dataKey="eu27" name="EU27" stroke="#CBD5E1" fill="none" strokeWidth={1.5} dot={false}/>
-                <Area dataKey="value" name={city} stroke={sdg.color} fill={`url(#ov${sdg.id})`} strokeWidth={2.5}
+                <Area dataKey="value" name={country} stroke={sdg.color} fill={`url(#ov${sdg.id})`} strokeWidth={2.5}
                   dot={(props: any) => {
                     const isAnom = anomalies.some(a => a.year === props.payload?.year);
                     return isAnom
@@ -467,7 +504,7 @@ export default function SDGDetail() {
           {/* Anomaly cards */}
           {anomalies.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400">
-              <p className="font-semibold">No statistically significant anomalies detected for {city}</p>
+              <p className="font-semibold">No statistically significant anomalies detected for {country}</p>
               <p className="text-sm mt-1">Data appears consistent with expected historical trends</p>
             </div>
           ) : (
@@ -501,26 +538,26 @@ export default function SDGDetail() {
         </div>
       )}
 
-      {/* ── CITY RANKINGS ──────────────────────────────────────────── */}
-      {tab === "City Rankings" && (
+      {/* ── COUNTRY RANKINGS ──────────────────────────────────────────── */}
+      {tab === "Country Rankings" && (
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-            <div><h2 className="font-display font-bold text-slate-800">All City Rankings — {sdg.shortTitle}</h2><p className="text-xs text-slate-400 mt-0.5">{CITY_SDG_SCORES.length} cities · click a row to switch city</p></div>
+            <div><h2 className="font-display font-bold text-slate-800">All Country Rankings — {sdg.shortTitle}</h2><p className="text-xs text-slate-400 mt-0.5">{COUNTRY_SDG_SCORES.length} countries · click a row to switch country</p></div>
             <span className="text-xs text-slate-400 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1"><Database className="w-3 h-3"/>{sdg.datasets[0]}</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead><tr className="bg-slate-50 border-b border-slate-100">
-                {["#","City","Country","SDG Score","CSI","Cluster"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{h}</th>)}
+                {["#","Country","Code","SDG Score","CSI","Cluster"].map(h=><th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{h}</th>)}
               </tr></thead>
               <tbody>
-                {[...CITY_SDG_SCORES].sort((a,b)=>(b.sdgScores[sdg.id]??0)-(a.sdgScores[sdg.id]??0)).map((c,i)=>{
+                {[...COUNTRY_SDG_SCORES].sort((a,b)=>(b.sdgScores[sdg.id]??0)-(a.sdgScores[sdg.id]??0)).map((c,i)=>{
                   const s = c.sdgScores[sdg.id]??0;
                   const col = scoreColor(s);
                   return (
-                    <tr key={c.city} onClick={()=>setCity(c.city)} className={`border-b border-slate-50 cursor-pointer transition-colors ${c.city===city?"bg-blue-50":"hover:bg-slate-50"}`}>
+                    <tr key={c.country} onClick={()=>setCountry(c.country)} className={`border-b border-slate-50 cursor-pointer transition-colors ${c.country===country?"bg-blue-50":"hover:bg-slate-50"}`}>
                       <td className="px-4 py-3 text-xs text-slate-400 font-mono">{i+1}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-800">{c.city}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{c.country}</td>
                       <td className="px-4 py-3"><span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{c.countryCode}</span></td>
                       <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full rounded-full" style={{ width:`${s}%`, background:col }}/></div><span className="text-sm font-bold" style={{ color:col }}>{s}</span></div></td>
                       <td className="px-4 py-3"><span className="text-xs font-bold px-2 py-0.5 rounded-lg" style={{ background:`${scoreColor(c.csi)}15`, color:scoreColor(c.csi) }}>{c.csi.toFixed(1)}</span></td>
@@ -571,3 +608,4 @@ export default function SDGDetail() {
     </div>
   );
 }
+

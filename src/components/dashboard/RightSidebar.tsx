@@ -66,22 +66,22 @@ const RightSidebar = () => {
       <MLSection icon={<Network className="w-3.5 h-3.5" />} title="Peer Group Clustering">
         <div className="space-y-1.5">
           {[
-            { name: "Nordic Leaders", cities: 12, csi: 85 },
-            { name: "Western Innovators", cities: 45, csi: 78 },
-            { name: "Mediterranean Trans.", cities: 68, csi: 65 },
-            { name: "Central EU Rising", cities: 82, csi: 58 },
-            { name: "Eastern Emerging", cities: 99, csi: 48 },
+            { name: "Nordic Leaders", countries: 5, csi: 85 },
+            { name: "Western Innovators", countries: 12, csi: 78 },
+            { name: "Mediterranean Trans.", countries: 9, csi: 65 },
+            { name: "Central EU Rising", countries: 11, csi: 58 },
+            { name: "Eastern Emerging", countries: 7, csi: 48 },
           ].map((c) => (
             <div key={c.name} className="flex items-center justify-between text-[10px] border border-border rounded p-1.5">
               <div>
                 <div className="font-medium text-foreground">{c.name}</div>
-                <div className="text-[9px] text-muted-foreground">{c.cities} cities</div>
+                <div className="text-[9px] text-muted-foreground">{c.countries} countries</div>
               </div>
               <span className="font-display font-bold text-eu-blue text-xs">{c.csi}</span>
             </div>
           ))}
         </div>
-        <div className="eu-ml-badge text-[9px] w-fit">Barcelona → Western Innovators</div>
+        <div className="eu-ml-badge text-[9px] w-fit">Sweden → Nordic Leaders</div>
       </MLSection>
 
       <MLSection icon={<TrendingUp className="w-3.5 h-3.5" />} title="Impact Estimator">
@@ -128,25 +128,25 @@ const RightSidebar = () => {
 
       <MLSection icon={<FileQuestion className="w-3.5 h-3.5" />} title="Missing Data Imputation">
         <div className="text-[10px] space-y-1">
-          <div className="flex justify-between"><span className="text-muted-foreground">Imputed values</span><span className="font-medium text-foreground">14 of 312</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Imputed values</span><span className="font-medium text-foreground">14 of 44 countries</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Avg confidence</span><span className="font-medium text-eu-success">87%</span></div>
-          <div className="text-[9px] text-muted-foreground">Based on: Amsterdam, Munich, Milan (cluster peers)</div>
+          <div className="text-[9px] text-muted-foreground">Based on: Norway, Denmark, Finland (cluster peers)</div>
         </div>
       </MLSection>
 
       <MLSection icon={<MessageSquareText className="w-3.5 h-3.5" />} title="NL Insights Generator" defaultOpen>
         <div className="text-[10px] leading-relaxed border border-border rounded p-2.5 bg-card text-foreground">
           <p className="mb-2">
-            <strong>Barcelona</strong> ranks in the <span className="font-medium text-eu-blue">top 32%</span> for overall sustainability. 
-            Renewable energy share (34.2%) exceeds peer average but remains <span className="font-medium text-eu-warning">12% below</span> EU 2030 targets.
+            <strong>Sweden</strong> ranks in the <span className="font-medium text-eu-blue">top 2%</span> for overall sustainability. 
+            Renewable energy share (54.2%) exceeds regional average but remains <span className="font-medium text-eu-warning">5% below</span> EU 2030 targets.
           </p>
           <p className="mb-2">
-            At the current improvement rate of +1.8%/yr, emission reduction targets are <span className="eu-badge-danger">unlikely to be met</span> without policy acceleration.
+            At the current improvement rate of +2.1%/yr, emission reduction targets are <span className="eu-badge-success">likely to be met</span> with sustained policy acceleration.
           </p>
           <div className="border-t border-border pt-2 mt-2 space-y-1 text-[9px]">
-            <div><strong className="text-eu-success">Strength:</strong> Water efficiency (P64), Green transport adoption</div>
-            <div><strong className="text-eu-danger">Risk:</strong> Emissions trajectory, Waste management gap</div>
-            <div><strong className="text-eu-blue">Focus:</strong> Accelerate renewable deployment, Improve waste recycling by 17%</div>
+            <div><strong className="text-eu-success">Strength:</strong> Water efficiency (P94), Green energy adoption</div>
+            <div><strong className="text-eu-danger">Risk:</strong> High energy intensity in heavy industry</div>
+            <div><strong className="text-eu-blue">Focus:</strong> Accelerate renewable deployment, Improve circularity by 12%</div>
           </div>
         </div>
       </MLSection>

@@ -17,7 +17,7 @@ const GlobalHeader = () => {
           </div>
           <div>
             <h1 className="font-display text-sm font-bold text-primary-foreground leading-tight">
-              EU City Sustainability Intelligence Dashboard
+              EU Country Sustainability Intelligence Dashboard
             </h1>
             <div className="flex items-center gap-2 mt-0.5">
               <span className="flex items-center gap-1 text-[10px] text-primary-foreground/70">

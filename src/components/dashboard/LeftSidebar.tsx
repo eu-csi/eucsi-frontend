@@ -3,7 +3,7 @@ import {
   ChevronDown, ChevronRight, MapPin, Clock, BarChart3, Target, Filter,
   Sliders, TrendingUp, Calculator, Grid3X3, Award, Download,
 } from "lucide-react";
-import { EU_CITIES } from "@/data/mockData";
+import { EU_COUNTRIES } from "@/data/mockData";
 
 interface SectionProps {
   icon: React.ReactNode;
@@ -56,11 +56,11 @@ const LeftSidebar = () => {
       </div>
 
       <CollapsibleSection icon={<MapPin className="w-3.5 h-3.5" />} title="Geographic Selection" number="1" defaultOpen>
-        <MiniSelect label="Primary City" options={EU_CITIES} defaultValue="Barcelona" />
-        <MiniSelect label="Comparison Cities" options={["Amsterdam", "Munich", "Stockholm", "Milan", "Copenhagen"]} defaultValue="Amsterdam" />
+        <MiniSelect label="Primary Country" options={EU_COUNTRIES} defaultValue="Sweden" />
+        <MiniSelect label="Comparison Countries" options={["Germany", "France", "Italy", "Spain", "Netherlands"]} defaultValue="Germany" />
         <div className="flex gap-2">
-          <MiniSelect label="Country" options={["All", "Spain", "Germany", "France", "Italy"]} />
-          <MiniSelect label="Pop. Band" options={["All", "<500K", "500K-1M", ">1M"]} />
+          <MiniSelect label="Region" options={["All", "Northern", "Western", "Southern", "Central", "Eastern"]} />
+          <MiniSelect label="Pop. Band" options={["All", "<5M", "5M-20M", ">20M"]} />
         </div>
         <div className="h-20 bg-eu-blue-pale rounded border border-border flex items-center justify-center">
           <span className="text-[9px] text-muted-foreground">🗺️ EU Map Selection</span>
@@ -82,7 +82,7 @@ const LeftSidebar = () => {
       </CollapsibleSection>
 
       <CollapsibleSection icon={<BarChart3 className="w-3.5 h-3.5" />} title="Benchmark Comparison" number="3">
-        {["Peer Cities", "National Average", "EU27 Average", "Top Performer"].map((o) => (
+        {["Peer Countries", "Regional Average", "EU27 Average", "Top Performer"].map((o) => (
           <label key={o} className="flex items-center gap-2 text-[10px] text-foreground cursor-pointer">
             <input type="checkbox" defaultChecked className="accent-eu-blue w-3 h-3" />
             {o}
@@ -99,7 +99,7 @@ const LeftSidebar = () => {
       </CollapsibleSection>
 
       <CollapsibleSection icon={<Filter className="w-3.5 h-3.5" />} title="Metric Focus Filter" number="5">
-        <MiniSelect label="SDG Goal" options={["All", "SDG 7 – Energy", "SDG 11 – Cities", "SDG 12 – Consumption", "SDG 13 – Climate"]} />
+        <MiniSelect label="SDG Goal" options={["All", "SDG 7 – Energy", "SDG 11 – Communities", "SDG 12 – Consumption", "SDG 13 – Climate"]} />
         <MiniSelect label="Pillar" options={["All", "Environmental", "Social", "Economic"]} />
         <label className="flex items-center gap-2 text-[10px] text-foreground cursor-pointer">
           <input type="checkbox" className="accent-eu-blue w-3 h-3" />
@@ -154,7 +154,7 @@ const LeftSidebar = () => {
       <CollapsibleSection icon={<Award className="w-3.5 h-3.5" />} title="Percentile Ranking" number="10">
         <div className="text-center space-y-1">
           <div className="text-sm font-display font-bold text-eu-blue">Top 32%</div>
-          <div className="text-[10px] text-muted-foreground">Rank #98 of 306 cities</div>
+          <div className="text-[10px] text-muted-foreground">Rank #14 of 44 countries</div>
           <div className="text-[10px]"><span className="eu-badge-success">Q2 – 2nd Quartile</span></div>
         </div>
       </CollapsibleSection>
@@ -171,3 +171,4 @@ const LeftSidebar = () => {
 };
 
 export default LeftSidebar;
+efault LeftSidebar;

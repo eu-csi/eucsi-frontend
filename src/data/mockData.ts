@@ -1,10 +1,11 @@
-export const EU_CITIES = [
-  "Amsterdam", "Athens", "Barcelona", "Berlin", "Bratislava", "Brussels", "Bucharest",
-  "Budapest", "Copenhagen", "Dublin", "Florence", "Frankfurt", "Gdańsk", "Hamburg",
-  "Helsinki", "Kraków", "Leipzig", "Lisbon", "Ljubljana", "Luxembourg", "Lyon",
-  "Madrid", "Malmö", "Marseille", "Milan", "Munich", "Naples", "Oslo", "Paris",
-  "Porto", "Prague", "Riga", "Rome", "Sofia", "Stockholm", "Tallinn", "The Hague",
-  "Turin", "Valencia", "Vienna", "Vilnius", "Warsaw", "Zagreb", "Zürich"
+export const EU_COUNTRIES = [
+  "Albania", "Andorra", "Austria", "Belarus", "Belgium", "Bosnia and Herzegovina",
+  "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark", "Estonia", "Finland",
+  "France", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy",
+  "Latvia", "Liechtenstein", "Lithuania", "Luxembourg", "Malta", "Moldova",
+  "Monaco", "Montenegro", "Netherlands", "North Macedonia", "Norway", "Poland",
+  "Portugal", "Romania", "Russia", "San Marino", "Serbia", "Slovakia", "Slovenia",
+  "Spain", "Sweden", "Switzerland", "Ukraine", "United Kingdom"
 ];
 
 export const YEARS = Array.from({ length: 10 }, (_, i) => 2015 + i);
@@ -37,21 +38,21 @@ export const TREND_DATA = YEARS.map((year) => ({
 }));
 
 export const BENCHMARK_DATA = [
-  { metric: "Emissions", city: 5.8, peerAvg: 6.2, eu27: 6.8, topPerformer: 3.1 },
-  { metric: "Renewable", city: 34.2, peerAvg: 30.1, eu27: 22.1, topPerformer: 62.4 },
-  { metric: "Air Quality", city: 18.3, peerAvg: 20.1, eu27: 21.5, topPerformer: 8.2 },
-  { metric: "Water Eff.", city: 82.1, peerAvg: 75.3, eu27: 70.2, topPerformer: 95.1 },
-  { metric: "Green Space", city: 45.2, peerAvg: 38.4, eu27: 35.0, topPerformer: 68.0 },
-  { metric: "Transport", city: 62.1, peerAvg: 55.8, eu27: 48.3, topPerformer: 85.2 },
+  { metric: "Emissions", country: 5.8, peerAvg: 6.2, eu27: 6.8, topPerformer: 3.1 },
+  { metric: "Renewable", country: 34.2, peerAvg: 30.1, eu27: 22.1, topPerformer: 62.4 },
+  { metric: "Air Quality", country: 18.3, peerAvg: 20.1, eu27: 21.5, topPerformer: 8.2 },
+  { metric: "Water Eff.", country: 82.1, peerAvg: 75.3, eu27: 70.2, topPerformer: 95.1 },
+  { metric: "Green Space", country: 45.2, peerAvg: 38.4, eu27: 35.0, topPerformer: 68.0 },
+  { metric: "Transport", country: 62.1, countryAvg: 55.8, eu27: 48.3, topPerformer: 85.2 },
 ];
 
 export const RADAR_DATA = [
-  { subject: "Environmental", city: 72, peerAvg: 65, eu27: 58, fullMark: 100 },
-  { subject: "Social", city: 68, peerAvg: 62, eu27: 55, fullMark: 100 },
-  { subject: "Economic", city: 78, peerAvg: 70, eu27: 65, fullMark: 100 },
-  { subject: "Transport", city: 62, peerAvg: 56, eu27: 48, fullMark: 100 },
-  { subject: "Energy", city: 74, peerAvg: 60, eu27: 52, fullMark: 100 },
-  { subject: "Governance", city: 70, peerAvg: 64, eu27: 60, fullMark: 100 },
+  { subject: "Environmental", country: 72, peerAvg: 65, eu27: 58, fullMark: 100 },
+  { subject: "Social", country: 68, peerAvg: 62, eu27: 55, fullMark: 100 },
+  { subject: "Economic", country: 78, peerAvg: 70, eu27: 65, fullMark: 100 },
+  { subject: "Transport", country: 62, peerAvg: 56, eu27: 48, fullMark: 100 },
+  { subject: "Energy", country: 74, peerAvg: 60, eu27: 52, fullMark: 100 },
+  { subject: "Governance", country: 70, peerAvg: 64, eu27: 60, fullMark: 100 },
 ];
 
 export const CORRELATION_MATRIX = [
@@ -90,11 +91,11 @@ export const FORECAST_DATA = Array.from({ length: 15 }, (_, i) => {
 });
 
 export const CLUSTER_DATA = [
-  { name: "Nordic Leaders", cities: ["Stockholm", "Copenhagen", "Helsinki", "Oslo"], csi: 85, color: "eu-success" },
-  { name: "Western Innovators", cities: ["Amsterdam", "Munich", "Vienna", "Zürich"], csi: 78, color: "eu-blue-light" },
-  { name: "Mediterranean Transitioning", cities: ["Barcelona", "Milan", "Lisbon", "Athens"], csi: 65, color: "eu-gold" },
-  { name: "Central European Rising", cities: ["Prague", "Warsaw", "Budapest", "Bratislava"], csi: 58, color: "eu-warning" },
-  { name: "Eastern Emerging", cities: ["Bucharest", "Sofia", "Riga", "Vilnius"], csi: 48, color: "eu-danger" },
+  { name: "Nordic Leaders", countries: ["Sweden", "Denmark", "Finland", "Norway", "Iceland"], csi: 85, color: "eu-success" },
+  { name: "Western Innovators", countries: ["Germany", "France", "Netherlands", "Belgium", "Austria", "Switzerland", "Luxembourg"], csi: 78, color: "eu-blue-light" },
+  { name: "Mediterranean Transitioning", countries: ["Spain", "Italy", "Portugal", "Greece", "Malta", "Cyprus"], csi: 65, color: "eu-gold" },
+  { name: "Central European Rising", countries: ["Poland", "Czechia", "Slovakia", "Hungary", "Slovenia", "Croatia"], csi: 58, color: "eu-warning" },
+  { name: "Eastern Emerging", countries: ["Romania", "Bulgaria", "Estonia", "Latvia", "Lithuania", "Ukraine", "Moldova"], csi: 48, color: "eu-danger" },
 ];
 
 export const EUROSTAT_DATASETS = [
@@ -102,3 +103,4 @@ export const EUROSTAT_DATASETS = [
   "urb_cpop1", "urb_cenv", "tran_hv_psmod", "nrg_ind_ei", "tesem060",
   "sdg_11_50", "nama_10_gdp"
 ];
+

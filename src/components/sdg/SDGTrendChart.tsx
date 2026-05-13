@@ -5,7 +5,7 @@ import { generateSdgTrendData } from "@/data/sdgData";
 
 interface Props {
   sdgId: number;
-  city?: string;
+  country?: string;
   color: string;
   metricLabel?: string;
 }
@@ -25,8 +25,8 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
-export default function SDGTrendChart({ sdgId, city = "Stockholm", color, metricLabel = "Score" }: Props) {
-  const data = generateSdgTrendData(sdgId, city);
+export default function SDGTrendChart({ sdgId, country = "Sweden", color, metricLabel = "Score" }: Props) {
+  const data = generateSdgTrendData(sdgId, country);
   const target = data[0]?.target;
 
   return (
@@ -65,7 +65,7 @@ export default function SDGTrendChart({ sdgId, city = "Stockholm", color, metric
           strokeWidth={1.5} dot={false}
         />
         <Area
-          type="monotone" dataKey="value" name={city}
+          type="monotone" dataKey="value" name={country}
           stroke={color} fill={`url(#grad-${sdgId})`}
           strokeWidth={2.5}
           dot={{ r: 3, fill: color, strokeWidth: 1.5, stroke: "white" }}

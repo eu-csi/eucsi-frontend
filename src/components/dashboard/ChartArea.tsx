@@ -71,7 +71,7 @@ const BenchmarkCharts = () => (
           <YAxis dataKey="metric" type="category" tick={{ fontSize: 10 }} width={60} />
           <Tooltip contentStyle={{ fontSize: 11, borderRadius: 6 }} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
-          <Bar dataKey="city" fill="hsl(224, 100%, 30%)" name="Barcelona" radius={[0, 2, 2, 0]} barSize={8} />
+          <Bar dataKey="country" fill="hsl(224, 100%, 30%)" name="Sweden" radius={[0, 2, 2, 0]} barSize={8} />
           <Bar dataKey="peerAvg" fill="hsl(217, 71%, 53%)" name="Peer Avg" radius={[0, 2, 2, 0]} barSize={8} />
           <Bar dataKey="eu27" fill="hsl(214, 32%, 80%)" name="EU27" radius={[0, 2, 2, 0]} barSize={8} />
           <Bar dataKey="topPerformer" fill="hsl(142, 71%, 35%)" name="Top Performer" radius={[0, 2, 2, 0]} barSize={8} />
@@ -85,7 +85,7 @@ const BenchmarkCharts = () => (
           <PolarGrid stroke="hsl(214 32% 91%)" />
           <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10 }} />
           <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 9 }} />
-          <Radar name="Barcelona" dataKey="city" stroke="hsl(224, 100%, 30%)" fill="hsl(224, 100%, 30%)" fillOpacity={0.15} />
+          <Radar name="Sweden" dataKey="country" stroke="hsl(224, 100%, 30%)" fill="hsl(224, 100%, 30%)" fillOpacity={0.15} />
           <Radar name="Peer Avg" dataKey="peerAvg" stroke="hsl(217, 71%, 53%)" fill="hsl(217, 71%, 53%)" fillOpacity={0.08} />
           <Radar name="EU27" dataKey="eu27" stroke="hsl(214, 32%, 70%)" fill="hsl(214, 32%, 70%)" fillOpacity={0.05} />
           <Legend wrapperStyle={{ fontSize: 10 }} />

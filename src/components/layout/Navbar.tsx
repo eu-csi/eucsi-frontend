@@ -38,7 +38,7 @@ export default function Navbar() {
               <span className="text-white font-bold text-xs font-display">EU</span>
             </div>
             <div className="hidden sm:block">
-              <span className="font-display font-bold text-sm text-foreground">CityPulse</span>
+              <span className="font-display font-bold text-sm text-foreground">CountryPulse</span>
               <span className="text-xs text-muted-foreground block leading-none">SDG Intelligence</span>
             </div>
           </Link>

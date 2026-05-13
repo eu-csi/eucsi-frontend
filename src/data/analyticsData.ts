@@ -1,4 +1,4 @@
-import { CITY_SDG_SCORES, SDG_DEFINITIONS, YEARS_RANGE } from "./sdgData";
+import { COUNTRY_SDG_SCORES, SDG_DEFINITIONS, YEARS_RANGE } from "./sdgData";
 
 // ─── Domain labels per SDG ────────────────────────────────────────────────────
 export const SDG_FORECAST_LABELS: Record<number, { title: string; metric: string; unit: string }> = {
@@ -9,10 +9,10 @@ export const SDG_FORECAST_LABELS: Record<number, { title: string; metric: string
   8:  { title: "Economic Growth Projection",       metric: "GDP Per Capita",               unit: "€k" },
   9:  { title: "Infrastructure Modernity Forecast",metric: "Infrastructure Index",          unit: "/100" },
   10: { title: "Inequality Reduction Trajectory",  metric: "GDP Disparity Index",          unit: "%" },
-  11: { title: "Air Quality & Urban Forecast",     metric: "PM2.5 AQI",                    unit: "µg/m³" },
+  11: { title: "Air Quality & Community Forecast",  metric: "PM2.5 AQI",                    unit: "µg/m³" },
   12: { title: "Waste Reduction Trajectory",       metric: "Waste Per Capita",             unit: "kg/yr" },
   13: { title: "Emissions Reduction Pathway",      metric: "GHG Per Capita",               unit: "tCO₂eq" },
-  15: { title: "Urban Green Space Forecast",       metric: "Urban Green Coverage",         unit: "%" },
+  15: { title: "Biodiversity Forecast",            metric: "Green Coverage",               unit: "%" },
   17: { title: "Data Coverage Projection",         metric: "Dataset Coverage Score",       unit: "%" },
 };
 
@@ -28,9 +28,9 @@ export interface ForecastPoint {
   isProjected: boolean;
 }
 
-export function generateForecastData(sdgId: number, city: string): ForecastPoint[] {
-  const cityRow  = CITY_SDG_SCORES.find(c => c.city === city);
-  const base     = cityRow?.sdgScores[sdgId] ?? 60;
+export function generateForecastData(sdgId: number, country: string): ForecastPoint[] {
+  const countryRow  = COUNTRY_SDG_SCORES.find(c => c.country === country);
+  const base     = countryRow?.sdgScores[sdgId] ?? 60;
   const allYears = [...YEARS_RANGE, 2025, 2026, 2027, 2028, 2029, 2030];
 
   // Per-SDG target for ref line
@@ -83,15 +83,15 @@ export interface Anomaly {
 }
 
 const GLOBAL_ANOMALY_EVENTS: Record<number, { label: string; description: string; direction: "down" | "up" }> = {
-  2020: { label: "COVID-19 Impact",     description: "Pandemic disrupted economic activity, mobility, and data collection across all cities.", direction: "down" },
-  2022: { label: "Energy Crisis",       description: "Russia-Ukraine conflict caused energy price spikes, supply chain disruptions, and inflation.", direction: "up" },
-  2018: { label: "Extreme Heat Events", description: "Record heatwaves across Western Europe affecting air quality, energy demand, and health risk.", direction: "up" },
+  2020: { label: "COVID-19 Impact",     description: "Pandemic disrupted economic activity, mobility, and data collection across all countries.", direction: "down" },
+  2022: { label: "Energy Crisis",       description: "Geopolitical conflict caused energy price spikes, supply chain disruptions, and inflation.", direction: "up" },
+  2018: { label: "Extreme Heat Events", description: "Record heatwaves across Europe affecting air quality, energy demand, and health risk.", direction: "up" },
 };
 
 const SDG_SPECIFIC_ANOMALIES: Record<number, Record<number, { label: string; severity: "critical"|"warning"|"positive"; description: string }>> = {
   7:  {
     2020: { label: "Renewable Surge",    severity: "positive",  description: "COVID lockdowns caused fossil fuel demand collapse; renewable share spiked." },
-    2022: { label: "Energy Price Shock", severity: "critical",  description: "Gas prices tripled, triggering emergency energy savings programs across EU." },
+    2022: { label: "Energy Price Shock", severity: "critical",  description: "Gas prices tripled, triggering emergency energy savings programs across Europe." },
   },
   13: {
     2020: { label: "Emissions Collapse", severity: "positive",  description: "Transport and industrial shutdowns caused largest single-year emissions drop on record." },
@@ -99,10 +99,10 @@ const SDG_SPECIFIC_ANOMALIES: Record<number, Record<number, { label: string; sev
   },
   8:  {
     2020: { label: "GDP Crash",          severity: "critical",  description: "EU GDP contracted ~6% — worst peacetime recession. Employment rate fell sharply." },
-    2021: { label: "Strong Recovery",    severity: "positive",  description: "Unprecedented fiscal stimulus drove V-shaped economic recovery in most EU cities." },
+    2021: { label: "Strong Recovery",    severity: "positive",  description: "Unprecedented fiscal stimulus drove V-shaped economic recovery in most countries." },
   },
   11: {
-    2020: { label: "Air Quality Bonus",  severity: "positive",  description: "Traffic reduction improved PM2.5 levels by 20–40% across major EU cities." },
+    2020: { label: "Air Quality Bonus",  severity: "positive",  description: "Traffic reduction improved PM2.5 levels by 20–40% across major countries." },
     2018: { label: "Heatwave AQI Spike", severity: "critical",  description: "O3 and PM2.5 surged during prolonged summer heat, exceeding WHO limits." },
   },
   5:  {
@@ -110,15 +110,15 @@ const SDG_SPECIFIC_ANOMALIES: Record<number, Record<number, { label: string; sev
   },
   6:  {
     2018: { label: "Severe Drought",     severity: "critical",  description: "Heatwave + drought caused WEI+ to breach 'Severe Stress' threshold in S. Europe." },
-    2022: { label: "Water Restrictions", severity: "warning",   description: "Multiple cities imposed water restrictions due to below-average rainfall." },
+    2022: { label: "Water Restrictions", severity: "warning",   description: "Multiple countries imposed water restrictions due to below-average rainfall." },
   },
   12: {
     2020: { label: "Waste Data Gap",     severity: "warning",   description: "Collection and reporting disruptions caused data gaps for 2020 recycling rates." },
   },
 };
 
-export function detectAnomalies(sdgId: number, city: string): Anomaly[] {
-  const data = generateForecastData(sdgId, city).filter(d => !d.isProjected && d.actual !== null);
+export function detectAnomalies(sdgId: number, country: string): Anomaly[] {
+  const data = generateForecastData(sdgId, country).filter(d => !d.isProjected && d.actual !== null);
   // Compute rolling mean and std
   const values = data.map(d => d.actual as number);
   const mean = values.reduce((s, v) => s + v, 0) / values.length;
@@ -154,12 +154,12 @@ export interface MetricBenchmark {
   metricKey: string;
   metricLabel: string;
   unit: string;
-  cityValue: number;
-  cityLabel: string;
+  countryValue: number;
+  countryLabel: string;
   eu27Avg: number;
-  topCity: string;
+  topCountry: string;
   topValue: number;
-  bottomCity: string;
+  bottomCountry: string;
   bottomValue: number;
   euTarget: number | null;
   whoThreshold: number | null;
@@ -168,19 +168,19 @@ export interface MetricBenchmark {
   targetGap: number | null;  // vs target (positive = meeting target)
 }
 
-export function getBenchmarks(sdgId: number, selectedCity: string): MetricBenchmark[] {
+export function getBenchmarks(sdgId: number, selectedCountry: string): MetricBenchmark[] {
   const sdg         = SDG_DEFINITIONS.find(s => s.id === sdgId);
   if (!sdg) return [];
-  const cityRow     = CITY_SDG_SCORES.find(c => c.city === selectedCity);
-  const cityScore   = cityRow?.sdgScores[sdgId] ?? 65;
+  const countryRow     = COUNTRY_SDG_SCORES.find(c => c.country === selectedCountry);
+  const countryScore   = countryRow?.sdgScores[sdgId] ?? 65;
 
   return sdg.metrics
     .filter(m => m.type !== "category")
     .map(metric => {
-      const k = cityScore / 100;
+      const k = countryScore / 100;
 
-      // Build mock values for all cities
-      const allVals = CITY_SDG_SCORES.map(c => {
+      // Build mock values for all countries
+      const allVals = COUNTRY_SDG_SCORES.map(c => {
         const cs   = c.sdgScores[sdgId] ?? 60;
         const km   = cs / 100;
         const BASE_VALS: Record<string, (k: number) => number> = {
@@ -223,37 +223,37 @@ export function getBenchmarks(sdgId: number, selectedCity: string): MetricBenchm
           energyProductivity:     km => +(3 + km * 8).toFixed(1),
           transportInfraScore:    km => +(25 + km * 65).toFixed(1),
           gdpDisparityIndex:      km => +Math.abs(50 - km * 80).toFixed(1),
-          interCityInequalityScore:km => +(35 - km * 28).toFixed(1),
+          interCountryInequalityScore:km => +(35 - km * 28).toFixed(1),
           urbanGreenCoverage:     km => +(15 + km * 35).toFixed(1),
           greenInfraGap:          km => +Math.max(0, 40 - (15 + km * 35)).toFixed(1),
           urbanBiodiversityProxy: km => +(25 + km * 65).toFixed(1),
         };
         const fn = BASE_VALS[metric.key];
-        return { city: c.city, val: fn ? +fn(km) : cs };
+        return { country: c.country, val: fn ? +fn(km) : cs };
       });
 
-      const fn2 = allVals.find(v => v.city === selectedCity);
-      const cityValue = fn2 ? fn2.val : +( metric.higherIsBetter ? 55 + k*30 : 40 - k*20 ).toFixed(1);
+      const fn2 = allVals.find(v => v.country === selectedCountry);
+      const countryValue = fn2 ? fn2.val : +( metric.higherIsBetter ? 55 + k*30 : 40 - k*20 ).toFixed(1);
       const sorted  = [...allVals].sort((a, b) => metric.higherIsBetter ? b.val - a.val : a.val - b.val);
-      const topCity = sorted[0];
-      const botCity = sorted[sorted.length - 1];
+      const topCountry = sorted[0];
+      const botCountry = sorted[sorted.length - 1];
       const eu27Avg = +(allVals.reduce((s, v) => s + v.val, 0) / allVals.length).toFixed(1);
 
       const target  = metric.euTarget ?? metric.whoThreshold ?? null;
-      const tGap    = target !== null ? +(metric.higherIsBetter ? cityValue - target : target - cityValue).toFixed(1) : null;
-      const pGap    = +(metric.higherIsBetter ? cityValue - eu27Avg : eu27Avg - cityValue).toFixed(1);
+      const tGap    = target !== null ? +(metric.higherIsBetter ? countryValue - target : target - countryValue).toFixed(1) : null;
+      const pGap    = +(metric.higherIsBetter ? countryValue - eu27Avg : eu27Avg - countryValue).toFixed(1);
 
       return {
         metricKey:     metric.key,
         metricLabel:   metric.label,
         unit:          metric.unit,
-        cityValue,
-        cityLabel:     selectedCity,
+        countryValue,
+        countryLabel:  selectedCountry,
         eu27Avg,
-        topCity:       topCity.city,
-        topValue:      topCity.val,
-        bottomCity:    botCity.city,
-        bottomValue:   botCity.val,
+        topCountry:    topCountry.country,
+        topValue:      topCountry.val,
+        bottomCountry: botCountry.country,
+        bottomValue:   botCountry.val,
         euTarget:      metric.euTarget ?? null,
         whoThreshold:  metric.whoThreshold ?? null,
         higherIsBetter: metric.higherIsBetter,
@@ -262,3 +262,4 @@ export function getBenchmarks(sdgId: number, selectedCity: string): MetricBenchm
       };
     });
 }
+

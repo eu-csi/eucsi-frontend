@@ -2,7 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, LabelList,
 } from "recharts";
-import { getTopCitiesForSdg } from "@/data/sdgData";
+import { getTopCountriesForSdg } from "@/data/sdgData";
 
 interface Props {
   sdgId: number;
@@ -16,7 +16,7 @@ const CustomTooltip = ({ active, payload }: any) => {
   return (
     <div className="bg-white border border-border rounded-xl shadow-lg p-3 text-sm">
       <p className="font-semibold text-foreground">{d.name}</p>
-      <p className="text-muted-foreground text-xs">{d.country}</p>
+      <p className="text-muted-foreground text-xs">{d.countryCode}</p>
       <p className="text-base font-bold mt-1" style={{ color: payload[0].fill }}>
         Score: {d.score.toFixed(1)}
       </p>
@@ -24,13 +24,13 @@ const CustomTooltip = ({ active, payload }: any) => {
   );
 };
 
-export default function SDGCityChart({ sdgId, color, count = 12 }: Props) {
-  const cities = getTopCitiesForSdg(sdgId, count);
+export default function SDGCountryChart({ sdgId, color, count = 12 }: Props) {
+  const countries = getTopCountriesForSdg(sdgId, count);
 
   return (
     <ResponsiveContainer width="100%" height={320}>
       <BarChart
-        data={cities}
+        data={countries}
         layout="vertical"
         margin={{ top: 0, right: 60, left: 10, bottom: 0 }}
       >
@@ -46,8 +46,8 @@ export default function SDGCityChart({ sdgId, color, count = 12 }: Props) {
         />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: "#F1F5F9" }} />
         <Bar dataKey="score" radius={[0, 6, 6, 0]} barSize={18}>
-          {cities.map((entry, idx) => {
-            const opacity = 1 - (idx / cities.length) * 0.45;
+          {countries.map((entry, idx) => {
+            const opacity = 1 - (idx / countries.length) * 0.45;
             return <Cell key={entry.name} fill={color} fillOpacity={opacity} />;
           })}
           <LabelList

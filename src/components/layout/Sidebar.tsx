@@ -3,7 +3,7 @@ import { LayoutDashboard, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { SDG_DEFINITIONS } from "@/data/sdgData";
 
-const CITY_AVG: Record<number, number> = {
+const COUNTRY_AVG: Record<number, number> = {
   5: 68, 6: 71, 7: 65, 8: 74, 11: 62, 12: 61, 13: 67, 17: 79,
   3: 70, 9: 64, 10: 66, 15: 68,
 };
@@ -21,7 +21,7 @@ export default function Sidebar() {
 
   function SdgItem({ sdg }: { sdg: typeof SDG_DEFINITIONS[0] }) {
     const active = isActive(sdg.slug);
-    const avg = CITY_AVG[sdg.id] ?? 65;
+    const avg = COUNTRY_AVG[sdg.id] ?? 65;
     const barColor = avg >= 75 ? "#16a34a" : avg >= 60 ? "#2563eb" : "#f59e0b";
     return (
       <Link

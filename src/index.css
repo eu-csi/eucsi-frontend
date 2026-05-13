@@ -167,11 +167,11 @@
   .csi-pill-low    { background: hsl(0 72% 51% / 0.1);    color: hsl(0 72% 38%); }
 
   /* ─── Map ────────────────────────────────────────── */
-  .city-dot {
+  .country-dot {
     cursor: pointer;
     transition: r 0.15s, opacity 0.15s;
   }
-  .city-dot:hover { opacity: 0.9; }
+  .country-dot:hover { opacity: 0.9; }
 
   /* ─── Metric card ────────────────────────────────── */
   .metric-card {

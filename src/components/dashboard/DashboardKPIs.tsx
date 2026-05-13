@@ -1,34 +1,34 @@
-import { CITY_SDG_SCORES } from "@/data/sdgData";
+import { COUNTRY_SDG_SCORES } from "@/data/sdgData";
 import { TrendingUp, Award, AlertTriangle, BarChart3 } from "lucide-react";
 
 export default function DashboardKPIs() {
-  const cities = CITY_SDG_SCORES;
-  const avgCsi = (cities.reduce((s, c) => s + c.csi, 0) / cities.length).toFixed(1);
-  const topCity = [...cities].sort((a, b) => b.csi - a.csi)[0];
-  const bottomCity = [...cities].sort((a, b) => a.csi - b.csi)[0];
-  const aboveTarget = cities.filter(c => c.csi >= 70).length;
+  const countries = COUNTRY_SDG_SCORES;
+  const avgCsi = (countries.reduce((s, c) => s + c.csi, 0) / countries.length).toFixed(1);
+  const topCountry = [...countries].sort((a, b) => b.csi - a.csi)[0];
+  const bottomCountry = [...countries].sort((a, b) => a.csi - b.csi)[0];
+  const aboveTarget = countries.filter(c => c.csi >= 70).length;
 
   const kpis = [
     {
       label: "Average CSI Score",
       value: avgCsi,
       unit: "/ 100",
-      sub: "Across 44 EU cities",
+      sub: "Across 44 EU countries",
       icon: <BarChart3 className="w-5 h-5" />,
       color: "text-blue-600",
       bg: "bg-blue-50",
     },
     {
-      label: "Top Performing City",
-      value: topCity.city,
-      unit: `CSI ${topCity.csi}`,
-      sub: topCity.cluster,
+      label: "Top Performing Country",
+      value: topCountry.country,
+      unit: `CSI ${topCountry.csi}`,
+      sub: topCountry.cluster,
       icon: <Award className="w-5 h-5" />,
       color: "text-green-600",
       bg: "bg-green-50",
     },
     {
-      label: "Cities Above Threshold",
+      label: "Countries Above Threshold",
       value: `${aboveTarget}`,
       unit: "of 44",
       sub: "CSI ≥ 70 (strong performance)",
@@ -38,9 +38,9 @@ export default function DashboardKPIs() {
     },
     {
       label: "Needs Attention",
-      value: bottomCity.city,
-      unit: `CSI ${bottomCity.csi}`,
-      sub: `${bottomCity.country} · ${bottomCity.cluster}`,
+      value: bottomCountry.country,
+      unit: `CSI ${bottomCountry.csi}`,
+      sub: `${bottomCountry.countryCode} · ${bottomCountry.cluster}`,
       icon: <AlertTriangle className="w-5 h-5" />,
       color: "text-amber-600",
       bg: "bg-amber-50",
