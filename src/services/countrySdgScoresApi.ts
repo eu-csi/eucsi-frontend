@@ -1,11 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { CountrySdgScore } from "@/data/sdgData";
 
-// Use environment variable for API base URL
-// For development: http://187.127.164.121:8000 or http://localhost:8000
-// For production: Use HTTPS endpoint and set VITE_API_BASE_URL in environment
-// Use proxy to bypass SSL/Certificate validation in development
-const API_BASE = "/api-live";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://187.127.164.121:8000";
 
 export interface CountrySDGScoresResponse {
   country: string;

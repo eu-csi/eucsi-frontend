@@ -10,14 +10,6 @@ export default defineConfig({
     hmr: {
       overlay: false,
     },
-    proxy: {
-      "/api-live": {
-        target: "https://187.127.164.121:8000",
-        changeOrigin: true,
-        secure: false, // Disables certificate validation
-        rewrite: (path) => path.replace(/^\/api-live/, ""),
-      },
-    },
   },
   plugins: [react()],
   resolve: {

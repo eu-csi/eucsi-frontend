@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 // Use environment variable for API base URL
-// Use proxy to bypass SSL/Certificate validation in development
-const API_BASE = "/api-live";
+const API_BASE = import.meta.env.VITE_API_URL || "https://187.127.164.121:8000";
 
 export interface SDGScore {
   id: number;
