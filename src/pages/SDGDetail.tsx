@@ -81,7 +81,10 @@ function MetricBlock({ metric, vals, color }: any) {
     <div onClick={() => setOpen(!open)} className="bg-white border border-slate-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition-all relative overflow-hidden group">
       <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl" style={{ background: color }} />
       <div className="flex items-start justify-between gap-2 mb-2 pl-2">
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide leading-tight">{metric.label}</p>
+        <div className="flex items-center gap-1.5">
+          <div className={`w-1.5 h-1.5 rounded-full ${metric.isLive ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide leading-tight">{metric.label}</p>
+        </div>
         <Info className="w-3.5 h-3.5 text-slate-300 shrink-0" />
       </div>
       {isCategory ? (
@@ -296,7 +299,10 @@ export default function SDGDetail() {
               <p className="text-xs text-slate-400">Click a card to expand details</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sdg.metrics.map(m => <MetricBlock key={m.key} metric={m} vals={metricVals[m.key]} color={sdg.color}/>)}
+              {sdg.metrics.map(m => {
+                const isLive = [5, 6, 7].includes(sdg.id);
+                return <MetricBlock key={m.key} metric={{...m, isLive}} vals={metricVals[m.key]} color={sdg.color}/>;
+              })}
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -348,7 +354,10 @@ export default function SDGDetail() {
             <div className="flex flex-wrap items-center gap-3">
               <Zap className="w-5 h-5 text-blue-600"/>
               <div>
-                <h2 className="font-display font-bold text-slate-800">{forecastLabel?.title ?? "Predictive Forecast"}</h2>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${[5, 6, 7].includes(sdg.id) ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
+                  <h2 className="font-display font-bold text-slate-800">{forecastLabel?.title ?? "Predictive Forecast"}</h2>
+                </div>
                 <p className="text-xs text-slate-500 mt-0.5">Historical 2015–2024 + Predictive projection 2025–2030 · 80% confidence interval</p>
               </div>
               <div className="ml-auto flex items-center gap-4 text-xs">

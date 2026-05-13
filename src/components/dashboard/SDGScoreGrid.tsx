@@ -338,6 +338,7 @@ export default function SDGScoreGrid({ liveCountries }: Props) {
                                    justify-center group-hover:scale-110 transition-transform"
                         style={{ background: sdg.bgColor, color: sdg.color }}
                       >
+                        <div className={`w-1 h-1 rounded-full mb-1 ${isLive ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" : isPending ? "bg-red-500" : "bg-red-500"}`} />
                         {sdg.id}
                       </span>
                       <span

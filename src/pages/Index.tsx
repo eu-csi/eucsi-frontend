@@ -334,7 +334,8 @@ function CountryDetailPanel({
                 {!hasScore ? (
                   <span className="text-[10px] text-slate-300 italic shrink-0">N/A</span>
                 ) : (
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className={`w-1 h-1 rounded-full ${[5,6,7].includes(sdg.id) ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
                     <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
                         className="h-full rounded-full transition-all duration-500"
@@ -347,9 +348,6 @@ function CountryDetailPanel({
                     >
                       {score}
                     </span>
-                    {isLiveScore && (
-                      <span className="text-green-400 text-[9px]" title="Live">●</span>
-                    )}
                   </div>
                 )}
               </Link>
@@ -529,10 +527,15 @@ export default function Index() {
               key={k.label}
               className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow relative"
             >
-              {k.isLive && (
+              {k.isLive ? (
                 <span
-                  className="absolute top-3 right-3 w-2 h-2 rounded-full bg-green-400 animate-pulse"
+                  className="absolute top-3 right-3 w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.6)]"
                   title="Live data from backend"
+                />
+              ) : (
+                <span
+                  className="absolute top-3 right-3 w-2 h-2 rounded-full bg-red-400"
+                  title="Mock / Fallback data"
                 />
               )}
               <div className={`w-9 h-9 rounded-lg ${k.bg} ${k.text} flex items-center justify-center mb-3`}>

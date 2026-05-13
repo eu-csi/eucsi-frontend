@@ -96,7 +96,10 @@ export default function SDGScoresDisplay({ country }: Props) {
               <div className="flex items-center gap-2">
                 {SDG_ICONS[sdg.id] || <span className="text-2xl">•</span>}
                 <div>
-                  <p className="text-xs font-semibold text-slate-600">SDG {sdg.id}</p>
+                  <div className="flex items-center gap-1.5">
+                    <div className={`w-1.5 h-1.5 rounded-full ${[5,6,7].includes(sdg.id) ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
+                    <p className="text-xs font-semibold text-slate-600">SDG {sdg.id}</p>
+                  </div>
                   <h4 className="text-sm font-bold text-slate-900 line-clamp-1">
                     {sdg.title.split("—")[1]?.trim() || sdg.title}
                   </h4>
