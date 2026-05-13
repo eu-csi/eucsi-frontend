@@ -88,25 +88,3 @@ export function getScoreBgColor(score: number | null): string {
   if (score >= 50) return "bg-orange-50";
   return "bg-red-50";
 }
-/**
- * Fetch all countries with their live composite and SDG scores
- */
-export async function fetchAllCountries(): Promise<SDGScoresResponse[]> {
-  const response = await fetch(`${API_BASE}/countries`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch countries: ${response.statusText}`);
-  }
-  return response.json();
-}
-
-/**
- * Hook to get all countries for rankings and maps
- */
-export function useAllCountries() {
-  return useQuery({
-    queryKey: ["all-countries"],
-    queryFn: fetchAllCountries,
-    staleTime: 1000 * 60 * 10,
-    retry: 2,
-  });
-}

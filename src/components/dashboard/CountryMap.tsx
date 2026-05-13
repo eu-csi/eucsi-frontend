@@ -39,24 +39,8 @@ export default function CountryMap({ selectedCountry, onCountryClick, liveCountr
   const [hoverInfo, setHoverInfo] = useState<CountrySdgScore | null>(null);
   
   // Use live countries if provided, otherwise fall back to mock data
-  const displayCountries = (liveCountries && liveCountries.length > 0)
-    ? liveCountries.map(c => {
-        // Handle backend SDGScoresResponse
-        if ('compositeCsi' in c) {
-          const staticMatch = COUNTRY_SDG_SCORES.find(s => s.country === c.country);
-          return {
-            ...staticMatch,
-            ...c,
-            csi: c.compositeCsi ?? 0,
-            lon: staticMatch?.lon ?? 0,
-            lat: staticMatch?.lat ?? 0,
-            cluster: staticMatch?.cluster ?? "EU Region",
-            percentile: staticMatch?.percentile ?? 50,
-            sdgAchievementRate: staticMatch?.sdgAchievementRate ?? 0,
-          } as any;
-        }
-        return c;
-      })
+  const displayCountries = liveCountries && liveCountries.length > 0 
+    ? liveCountries
     : COUNTRY_SDG_SCORES;
 
   return (
