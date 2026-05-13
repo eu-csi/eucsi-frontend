@@ -1,6 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 
-const API_BASE = "http://187.127.164.121:8000"; // No trailing slash
+// Use environment variable for API base URL
+// For development: http://187.127.164.121:8000 or http://localhost:8000
+// For production: Use HTTPS endpoint and set VITE_API_BASE_URL in environment
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://187.127.164.121:8000"; // No trailing slash
 
 export interface SDGScore {
   id: number;

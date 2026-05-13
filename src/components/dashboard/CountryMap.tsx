@@ -5,7 +5,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { LiveCountryRecord } from "@/types/countryTypes";
 import { COUNTRY_SDG_SCORES, type CountrySdgScore } from "@/data/sdgData";
 
-interface Props {
+  interface Props {
   selectedCountry?: string;
   onCountryClick?: Dispatch<SetStateAction<string | undefined>>;
   liveCountries?: LiveCountryRecord[];
