@@ -1,10 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { CountrySdgScore } from "@/data/sdgData";
-
-// Use environment variable for API base URL
-// For development: http://187.127.164.121:8000 or http://localhost:8000
-// For production: Use HTTPS endpoint and set VITE_API_BASE_URL in environment
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://187.127.164.121:8000";
+import { fetchSDGScores } from "./sdgScoresApi";
 
 export interface CountrySDGScoresResponse {
   country: string;
@@ -25,26 +21,18 @@ export interface CountrySDGScoresResponse {
 export async function fetchCountrySDGScores(
   country: string
 ): Promise<CountrySDGScoresResponse> {
-  const response = await fetch(
-    `${API_BASE}/sdg-scores/${encodeURIComponent(country)}`
-  );
-  if (!response.ok) {
-    throw new Error(`Failed to fetch SDG scores for ${country}`);
-  }
-  const data = await response.json();
-
-  // Transform backend response to country-specific format
+  const data = await fetchSDGScores(country);
   return {
     country,
     countryCode: data.countryCode,
     compositeCsi: data.compositeCsi,
-    sdgScores: Object.entries(data.sdgScores).reduce((acc: Record<number, any>, [key, score]: [string, any]) => {
-      const sdgId = parseInt(key.replace('sdg', ''));
+    sdgScores: Object.entries(data.sdgScores).reduce((acc: Record<number, any>, [_, val]: [string, any]) => {
+      const sdgId = val.id;
       acc[sdgId] = {
-        score: score.score,
-        label: score.title,
-        metrics: score.metrics,
-        status: score.status,
+        score: val.score,
+        label: val.title,
+        metrics: val.metrics,
+        status: val.status || (val.score && val.score >= 70 ? "On Track" : "Needs Work"),
       };
       return acc;
     }, {}),

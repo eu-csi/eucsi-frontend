@@ -203,8 +203,8 @@ export interface LiveCountryRecord {
 
   // CSI Pipeline outputs (computed by backend)
   csi: number;                  // 0–100 Composite Sustainability Index
-  rank: number;                 // Ranking position (1–44)
-  percentile: number;           // rank among 44 countries → 0–100
+  rank: number;                 // Ranking position (1–27)
+  percentile: number;           // rank among 27 countries → 0–100
   sdgAchievementRate: number;   // % of SDGs scoring ≥ 70
   cluster: CountryCluster;
 

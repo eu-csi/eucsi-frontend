@@ -13,7 +13,7 @@ export default function DashboardKPIs() {
       label: "Average CSI Score",
       value: avgCsi,
       unit: "/ 100",
-      sub: "Across 44 EU countries",
+      sub: `Across ${countries.length} EU countries`,
       icon: <BarChart3 className="w-5 h-5" />,
       color: "text-blue-600",
       bg: "bg-blue-50",
@@ -30,7 +30,7 @@ export default function DashboardKPIs() {
     {
       label: "Countries Above Threshold",
       value: `${aboveTarget}`,
-      unit: "of 44",
+      unit: `of ${countries.length}`,
       sub: "CSI ≥ 70 (strong performance)",
       icon: <TrendingUp className="w-5 h-5" />,
       color: "text-indigo-600",

@@ -154,7 +154,7 @@ const LeftSidebar = () => {
       <CollapsibleSection icon={<Award className="w-3.5 h-3.5" />} title="Percentile Ranking" number="10">
         <div className="text-center space-y-1">
           <div className="text-sm font-display font-bold text-eu-blue">Top 32%</div>
-          <div className="text-[10px] text-muted-foreground">Rank #14 of 44 countries</div>
+          <div className="text-[10px] text-muted-foreground">Rank #14 of {EU_COUNTRIES.length} countries</div>
           <div className="text-[10px]"><span className="eu-badge-success">Q2 – 2nd Quartile</span></div>
         </div>
       </CollapsibleSection>
@@ -171,4 +171,3 @@ const LeftSidebar = () => {
 };
 
 export default LeftSidebar;
-efault LeftSidebar;

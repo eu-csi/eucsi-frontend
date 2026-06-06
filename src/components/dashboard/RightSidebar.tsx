@@ -66,11 +66,11 @@ const RightSidebar = () => {
       <MLSection icon={<Network className="w-3.5 h-3.5" />} title="Peer Group Clustering">
         <div className="space-y-1.5">
           {[
-            { name: "Nordic Leaders", countries: 5, csi: 85 },
-            { name: "Western Innovators", countries: 12, csi: 78 },
-            { name: "Mediterranean Trans.", countries: 9, csi: 65 },
-            { name: "Central EU Rising", countries: 11, csi: 58 },
-            { name: "Eastern Emerging", countries: 7, csi: 48 },
+            { name: "Nordic Leaders", countries: 3, csi: 85 },
+            { name: "Western Innovators", countries: 7, csi: 78 },
+            { name: "Mediterranean Trans.", countries: 6, csi: 65 },
+            { name: "Central EU Rising", countries: 6, csi: 58 },
+            { name: "Eastern Emerging", countries: 5, csi: 48 },
           ].map((c) => (
             <div key={c.name} className="flex items-center justify-between text-[10px] border border-border rounded p-1.5">
               <div>
@@ -128,9 +128,9 @@ const RightSidebar = () => {
 
       <MLSection icon={<FileQuestion className="w-3.5 h-3.5" />} title="Missing Data Imputation">
         <div className="text-[10px] space-y-1">
-          <div className="flex justify-between"><span className="text-muted-foreground">Imputed values</span><span className="font-medium text-foreground">14 of 44 countries</span></div>
-          <div className="flex justify-between"><span className="text-muted-foreground">Avg confidence</span><span className="font-medium text-eu-success">87%</span></div>
-          <div className="text-[9px] text-muted-foreground">Based on: Norway, Denmark, Finland (cluster peers)</div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Imputed values</span><span className="font-medium text-foreground">0 of 27 countries</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Avg confidence</span><span className="font-medium text-eu-success">N/A</span></div>
+          <div className="text-[9px] text-muted-foreground">Based on: Sweden, Denmark, Finland (cluster peers)</div>
         </div>
       </MLSection>
 

@@ -13,15 +13,16 @@ import { useQueries } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import type { LiveCountryRecord } from "@/types/countryTypes";
 import { COUNTRY_SDG_SCORES, SDG_DEFINITIONS } from "@/data/sdgData";
+import { fetchSDGScores } from "@/services/sdgScoresApi";
 
 // ─── Config ────────────────────────────────────────────────────────────────
-const API_BASE = import.meta.env.VITE_API_URL ?? "https://187.127.164.121:8000";
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
 
-/** SDGs the Python/FastAPI backend currently serves live historical data for */
-const LIVE_SDG_IDS = new Set([5, 6, 7]);
+/** SDGs the Python/FastAPI backend currently serves live historical data for (all 12 from DB) */
+const LIVE_SDG_IDS = new Set([3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17]);
 
 /** SDGs whose backend models are still in development → always show "—" */
-const PENDING_SDG_IDS = new Set([8, 11, 12]);
+const PENDING_SDG_IDS = new Set<number>([]);
 
 // ─── Types ─────────────────────────────────────────────────────────────────
 interface SdgEntry {
@@ -63,11 +64,9 @@ function csiChipClass(csi: number): string {
   return "bg-red-100 text-red-700 border border-red-200";
 }
 
-// ─── Fetch function (FastAPI / Python backend) ──────────────────────────────
+// ─── Fetch function (FastAPI / PostgreSQL backend) ──────────────────────────────
 async function fetchCountryScores(countryName: string): Promise<CountryScoreResponse> {
-  const res = await fetch(`${API_BASE}/sdg-scores/${encodeURIComponent(countryName)}`);
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${countryName}`);
-  return res.json() as Promise<CountryScoreResponse>;
+  return fetchSDGScores(countryName) as any;
 }
 
 // ─── Heatmap row sub-component ───────────────────────────────────────────────
@@ -242,10 +241,9 @@ export default function SDGScoreGrid({ liveCountries }: Props) {
         <div>
           <h3 className="font-semibold text-slate-800 text-sm">SDG Score Heatmap</h3>
           <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
-            Last known <strong>Eurostat historical</strong> values (not forecast) ·
+            Last known <strong>Eurostat historical</strong> values ·
             Top 8 + Bottom 2 EU countries by CSI ·{" "}
-            <strong className="text-green-600">SDG 5 / 6 / 7</strong> live via FastAPI ·{" "}
-            <strong className="text-slate-400">SDG 8 / 11 / 12</strong> model pending
+            <strong className="text-green-600">All 12 SDGs</strong> live via FastAPI &amp; PostgreSQL
             {lastTimestamp && (
               <>
                 {" · "}fetched at{" "}
@@ -430,15 +428,10 @@ export default function SDGScoreGrid({ liveCountries }: Props) {
       <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex flex-wrap
                       items-center justify-between gap-2">
         <p className="text-[10px] text-slate-400">
-          <strong className="text-green-600">SDG 5</strong> = Gender Employment Gap
-          (<code className="bg-slate-100 px-1 rounded">tesem060 / lfsi_emp_a</code>) ·{" "}
-          <strong className="text-green-600">SDG 6</strong> = Water Exploitation Index WEI+
-          (<code className="bg-slate-100 px-1 rounded">sdg_06_60</code>) ·{" "}
-          <strong className="text-green-600">SDG 7</strong> = Renewable Energy Share
-          (<code className="bg-slate-100 px-1 rounded">sdg_07_40</code>)
+          Historical Eurostat data loaded for 12 SDGs including Gender Equality (tesem060), Water Exploitation (sdg_06_60), and Renewable Energy Share (sdg_07_40)
         </p>
         <p className="text-[10px] text-slate-300">
-          Historical Eurostat data · not forecast · SDG 8 / 11 / 12 backend models in development
+          Database-backed live rankings and metrics
         </p>
       </div>
     </div>

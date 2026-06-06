@@ -1,11 +1,8 @@
 export const EU_COUNTRIES = [
-  "Albania", "Andorra", "Austria", "Belarus", "Belgium", "Bosnia and Herzegovina",
-  "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark", "Estonia", "Finland",
-  "France", "Germany", "Greece", "Hungary", "Iceland", "Ireland", "Italy",
-  "Latvia", "Liechtenstein", "Lithuania", "Luxembourg", "Malta", "Moldova",
-  "Monaco", "Montenegro", "Netherlands", "North Macedonia", "Norway", "Poland",
-  "Portugal", "Romania", "Russia", "San Marino", "Serbia", "Slovakia", "Slovenia",
-  "Spain", "Sweden", "Switzerland", "Ukraine", "United Kingdom"
+  "Austria", "Belgium", "Bulgaria", "Croatia", "Cyprus", "Czechia", "Denmark",
+  "Estonia", "Finland", "France", "Germany", "Greece", "Hungary", "Ireland",
+  "Italy", "Latvia", "Lithuania", "Luxembourg", "Malta", "Netherlands",
+  "Poland", "Portugal", "Romania", "Slovakia", "Slovenia", "Spain", "Sweden"
 ];
 
 export const YEARS = Array.from({ length: 10 }, (_, i) => 2015 + i);
@@ -91,11 +88,11 @@ export const FORECAST_DATA = Array.from({ length: 15 }, (_, i) => {
 });
 
 export const CLUSTER_DATA = [
-  { name: "Nordic Leaders", countries: ["Sweden", "Denmark", "Finland", "Norway", "Iceland"], csi: 85, color: "eu-success" },
-  { name: "Western Innovators", countries: ["Germany", "France", "Netherlands", "Belgium", "Austria", "Switzerland", "Luxembourg"], csi: 78, color: "eu-blue-light" },
+  { name: "Nordic Leaders", countries: ["Sweden", "Denmark", "Finland"], csi: 85, color: "eu-success" },
+  { name: "Western Innovators", countries: ["Germany", "France", "Netherlands", "Belgium", "Austria", "Luxembourg", "Ireland"], csi: 78, color: "eu-blue-light" },
   { name: "Mediterranean Transitioning", countries: ["Spain", "Italy", "Portugal", "Greece", "Malta", "Cyprus"], csi: 65, color: "eu-gold" },
   { name: "Central European Rising", countries: ["Poland", "Czechia", "Slovakia", "Hungary", "Slovenia", "Croatia"], csi: 58, color: "eu-warning" },
-  { name: "Eastern Emerging", countries: ["Romania", "Bulgaria", "Estonia", "Latvia", "Lithuania", "Ukraine", "Moldova"], csi: 48, color: "eu-danger" },
+  { name: "Eastern Emerging", countries: ["Romania", "Bulgaria", "Estonia", "Latvia", "Lithuania"], csi: 48, color: "eu-danger" },
 ];
 
 export const EUROSTAT_DATASETS = [

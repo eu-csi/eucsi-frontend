@@ -10,7 +10,7 @@ import {
 import {
   generateForecastData, detectAnomalies, getBenchmarks, SDG_FORECAST_LABELS,
 } from "@/data/analyticsData";
-import { useSDGScores, fetchIndicatorData } from "@/services/sdgScoresApi";
+import { useSDGScores, fetchIndicatorData, fetchCountriesList } from "@/services/sdgScoresApi";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useEffect } from "react";
 import {
@@ -19,12 +19,34 @@ import {
   Legend, ReferenceLine, Cell, LabelList, Scatter, ScatterChart, ZAxis,
 } from "recharts";
 
+// ─── Config ──────────────────────────────────────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function scoreColor(s: number) {
   if (s >= 78) return "#15803d";
   if (s >= 65) return "#2563eb";
   if (s >= 55) return "#d97706";
   return "#dc2626";
+}
+
+/**
+ * Format a value for metric card display.
+ * Live DB values come as raw numbers (e.g. 53830 for GDP). This ensures they
+ * display with proper comma separation and decimal rounding.
+ */
+function formatDisplayValue(rawValue: any, unit: string): string {
+  if (rawValue === undefined || rawValue === null) return "—";
+  if (typeof rawValue === "string" && rawValue !== "") return rawValue; // already formatted
+  const num = Number(rawValue);
+  if (isNaN(num)) return String(rawValue);
+  // GDP (€) or other large numbers → integer with comma thousands separator
+  if (unit === "€" || num > 9_999) return Math.round(num).toLocaleString("en-US");
+  // Integers or numbers ≥ 100 → no decimals
+  if (Number.isInteger(num) || num >= 100) return Math.round(num).toString();
+  // Small decimals
+  if (num >= 10) return num.toFixed(1);
+  return num.toFixed(2);
 }
 
 function getMockMetricValues(sdgId: number, country: string): Record<string, { value: string | number; trend?: number; benchmark?: number; category?: string }> {
@@ -35,7 +57,7 @@ function getMockMetricValues(sdgId: number, country: string): Record<string, { v
     5:  { genderEmploymentGap: { value: +(22-m*18).toFixed(1), trend: -0.4, benchmark: 10.1 }, femaleEmploymentRate: { value: +(45+m*40).toFixed(1), trend: 1.2, benchmark: 68.4 }, genderGapTrend: { value: +(-0.9+m*0.8).toFixed(2), trend: 0.1, benchmark: -0.2 } },
     6:  { weiPlus: { value: +(40-m*35).toFixed(1), trend: -1.1, benchmark: 18.4 }, waterPerCapita: { value: Math.round(220-m*110), trend: -2.3, benchmark: 155 }, waterStressCategory: { value: "", category: m>=0.8?"No Stress":m>=0.65?"Low":m>=0.5?"Stress":"Severe" }, waterAbstractionTrend: { value: +(-0.5-m*0.8).toFixed(2), trend: -0.2, benchmark: -0.3 } },
     7:  { renewableShare: { value: +(10+m*55).toFixed(1), trend: 5.8, benchmark: 22.1 }, energyIntensity: { value: +(8-m*5).toFixed(2), trend: -0.4, benchmark: 5.2 }, aimForecast: { value: Math.round(800+m*2200), trend: 3.1, benchmark: 1450 }, distributionLosses: { value: Math.round(200-m*130), trend: -3.1, benchmark: 120 }, energyCategoryLabel: { value: "", category: m>=0.75?"High":m>=0.55?"Med":"Low" } },
-    8:  { gdpPerCapita: { value: Math.round(15000+m*55000).toLocaleString(), trend: 2.1, benchmark: 31200 }, employmentRate: { value: +(55+m*30).toFixed(1), trend: 1.4, benchmark: 72.1 }, carbonIntensity: { value: Math.round(400-m*260), trend: -4.2, benchmark: 240 }, gdpGrowthTrend: { value: +(0.5+m*3).toFixed(1), trend: 0.3, benchmark: 1.8 } },
+    8:  { gdpPerCapita: { value: Math.round(18000+m*112000).toLocaleString(), trend: 2.1, benchmark: 31200 }, employmentRate: { value: +(55+m*30).toFixed(1), trend: 1.4, benchmark: 72.1 }, carbonIntensity: { value: Math.round(400-m*260), trend: -4.2, benchmark: 240 }, gdpGrowthTrend: { value: +(0.5+m*3).toFixed(1), trend: 0.3, benchmark: 1.8 } },
     11: { aqiPm25: { value: +(35-m*28).toFixed(1), trend: -2.1, benchmark: 18.3 }, greenSpacePerCapita: { value: +(4+m*25).toFixed(1), trend: 0.8, benchmark: 14.2 }, greenInfraShare: { value: +(15+m*35).toFixed(1), trend: 1.2, benchmark: 28.4 }, populationDensity: { value: Math.round(1500+(1-m)*5000), trend: 1.8, benchmark: 3200 }, publicTransportShare: { value: +(25+m*50).toFixed(1), trend: 2.3, benchmark: 44.2 }, trafficCongestionIndex: { value: +(50-m*38).toFixed(1), trend: -1.4, benchmark: 32.5 } },
     12: { recyclingRate: { value: +(25+m*50).toFixed(1), trend: 3.1, benchmark: 47.8 }, wastePerCapita: { value: Math.round(700-m*280), trend: -8.2, benchmark: 531 }, compostingRate: { value: +(5+m*25).toFixed(1), trend: 2.2, benchmark: 14.3 }, wasteReductionTrend: { value: +(-15+m*10).toFixed(1), trend: -1.1, benchmark: -4.2 } },
     13: { ghgPerCapita: { value: +(14-m*11).toFixed(1), trend: -4.1, benchmark: 7.2 }, carbonIntensityEconomy: { value: Math.round(550-m*400), trend: -5.2, benchmark: 246 }, totalGhgEmissions: { value: +(18-m*14).toFixed(1), trend: -3.8, benchmark: 12.4 }, emissionsReductionTrend: { value: +(m*6).toFixed(1), trend: 0.4, benchmark: 2.8 } },
@@ -94,7 +116,9 @@ function MetricBlock({ metric, vals, color }: any) {
       ) : (
         <div className="pl-2">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-2xl font-black font-display" style={{ color }}>{vals.value}</span>
+            <span className="text-2xl font-black font-display" style={{ color }}>
+              {formatDisplayValue(vals.value, metric.unit)}
+            </span>
             <span className="text-xs text-slate-400">{metric.unit}</span>
           </div>
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -176,7 +200,20 @@ export default function SDGDetail() {
   const forecastLabel = SDG_FORECAST_LABELS[sdg.id];
 
   // ─── Live Forecast Hook ──────────────────────────────────────────────────
-  const indicatorMap: Record<number, string> = { 5: "gender_gap", 6: "WEI_plus", 7: "RES_total_pct" };
+  const indicatorMap: Record<number, string> = {
+    3: "PM2.5_exposure",
+    5: "gender_gap",
+    6: "WEI_plus",
+    7: "RES_total_pct",
+    8: "GDP_per_capita",
+    9: "energy_productivity",
+    10: "GDP_disparity",
+    11: "PM2.5_AQI",
+    12: "waste_per_capita",
+    13: "GHG_per_capita",
+    15: "green_coverage",
+    17: "dataset_coverage"
+  };
   const indicator = indicatorMap[sdg.id];
 
   const { data: liveForecast, isLoading: forecastLoading } = useQuery({
@@ -199,9 +236,8 @@ export default function SDGDetail() {
       if (d.is_forecast) {
         points[year].projected = d.value;
         points[year].isProjected = true;
-        // Mocking bands if not provided by backend for simplicity
-        points[year].upper = d.value * 1.05;
-        points[year].lower = d.value * 0.95;
+        points[year].upper = d.conf_high ?? (d.value * 1.05);
+        points[year].lower = d.conf_low ?? (d.value * 0.95);
       } else {
         points[year].actual = d.value;
       }
@@ -211,6 +247,54 @@ export default function SDGDetail() {
 
     return Object.values(points).sort((a, b) => a.year - b.year);
   }, [liveForecast, forecastData, indicator]);
+
+  // ─── Live Historical Trend (for Overview chart) ──────────────────────────
+  const { data: liveTrendSeries } = useQuery({
+    queryKey: ["indicator-trend", indicator, country],
+    queryFn: () => fetchIndicatorData(indicator!, country, 2015, 2024),
+    enabled: !!indicator,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  /** Merges real DB time-series values into the generated trend skeleton */
+  const mergedTrendData = useMemo(() => {
+    if (!liveTrendSeries?.data?.length) return trendData;
+    const liveMap: Record<number, number> = {};
+    liveTrendSeries.data
+      .filter((d: any) => !d.is_forecast)
+      .forEach((d: any) => { liveMap[new Date(d.date).getFullYear()] = d.value; });
+    return trendData.map(t => ({
+      ...t,
+      value: liveMap[t.year] ?? t.value,
+    }));
+  }, [liveTrendSeries, trendData]);
+
+  // ─── Live Top Countries for this SDG ─────────────────────────────────────
+  const { data: liveTopCountriesList } = useQuery({
+    queryKey: ["sdg-top-countries", sdg.id],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/sdg-scores/sdg/${sdg.id}/year/2024`);
+      if (!res.ok) return null;
+      const dbData = await res.json() as any[];
+      const countryList = await fetchCountriesList();
+      const countryMap = Object.fromEntries(countryList.map((c: any) => [c.country_id, c]));
+      return dbData
+        .sort((a: any, b: any) => b.normalised_score - a.normalised_score)
+        .slice(0, 12)
+        .map((s: any) => ({
+          name: countryMap[s.country_id]?.name ?? `Country ${s.country_id}`,
+          country: countryMap[s.country_id]?.name ?? `Country ${s.country_id}`,
+          score: +(s.normalised_score ?? 0).toFixed(1),
+          csi: 0,
+        }));
+    },
+    staleTime: 1000 * 60 * 30,
+    retry: 1,
+  });
+
+  const displayTopCountries = (liveTopCountriesList ?? topCountries).slice(0, 6);
+  const hasLiveTrend = !!liveTrendSeries?.data?.length;
+  const hasLiveTopCountries = !!liveTopCountriesList?.length;
 
   return (
     <div className="px-6 py-6 max-w-screen-xl mx-auto space-y-5">
@@ -285,7 +369,7 @@ export default function SDGDetail() {
               <div className="flex items-center gap-1.5">
                 <div className={`w-1.5 h-1.5 rounded-full ${
                   (t === "Rankings") || 
-                  ((t === "Overview" || t === "Forecast") && [5, 6, 7].includes(sdg.id))
+                  ((t === "Overview" || t === "Forecast") && [3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17].includes(sdg.id))
                     ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
                     : "bg-red-500"
                 }`} />
@@ -308,7 +392,7 @@ export default function SDGDetail() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {sdg.metrics.map(m => {
-                const isLive = [5, 6, 7].includes(sdg.id);
+                const isLive = [3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17].includes(sdg.id);
                 return <MetricBlock key={m.key} metric={{...m, isLive}} vals={metricVals[m.key]} color={sdg.color}/>;
               })}
             </div>
@@ -316,9 +400,15 @@ export default function SDGDetail() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <h3 className="font-display font-semibold text-slate-800 mb-1">Score Trend 2015–2024</h3>
-              <p className="text-xs text-slate-400 mb-4">{country} vs EU27 average</p>
+              <p className="text-xs text-slate-400 mb-4">
+                {country} vs EU27 average
+                {hasLiveTrend
+                  ? <span className="ml-2 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">● Live DB</span>
+                  : <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Estimated trend</span>
+                }
+              </p>
               <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={trendData}>
+                <AreaChart data={mergedTrendData}>
                   <defs>
                     <linearGradient id={`ov${sdg.id}`} x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor={sdg.color} stopOpacity={0.2}/>
@@ -336,9 +426,15 @@ export default function SDGDetail() {
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-5">
               <h3 className="font-display font-semibold text-slate-800 mb-1">Top 6 Countries</h3>
-              <p className="text-xs text-slate-400 mb-4">Ranked by {sdg.shortTitle} score</p>
+              <p className="text-xs text-slate-400 mb-4">
+                Ranked by {sdg.shortTitle} score
+                {hasLiveTopCountries
+                  ? <span className="ml-2 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">● Live DB</span>
+                  : <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">Cached scores</span>
+                }
+              </p>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={topCountries.slice(0,6)} layout="vertical" margin={{ left:0, right:40 }}>
+                <BarChart data={displayTopCountries} layout="vertical" margin={{ left:0, right:40 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false}/>
                   <XAxis type="number" domain={[0,100]} tick={{ fontSize:10, fill:"#94A3B8" }} tickLine={false} axisLine={false}/>
                   <YAxis dataKey="name" type="category" tick={{ fontSize:11, fill:"#475569", fontWeight:600 }} tickLine={false} axisLine={false} width={85}/>
@@ -363,7 +459,7 @@ export default function SDGDetail() {
               <Zap className="w-5 h-5 text-blue-600"/>
               <div>
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${[5, 6, 7].includes(sdg.id) ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"}`} />
+                  <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
                   <h2 className="font-display font-bold text-slate-800">{forecastLabel?.title ?? "Predictive Forecast"}</h2>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">Historical 2015–2024 + Predictive projection 2025–2030 · 80% confidence interval</p>
@@ -468,6 +564,7 @@ export default function SDGDetail() {
                 <h2 className="font-display font-bold text-slate-800">Metric Benchmarking — {country}</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Each metric compared vs EU27 average, top EU country, bottom EU country, and official targets</p>
               </div>
+              <span className="ml-auto text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2.5 py-1">⚠ Illustrative statistical model</span>
             </div>
           </div>
 
@@ -535,7 +632,10 @@ export default function SDGDetail() {
                 <h2 className="font-display font-bold text-slate-800">Anomaly Detection — {country}</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Statistical outliers (Z-score &gt;1.4σ) and known event-driven irregularities in historical data</p>
               </div>
-              <span className="ml-auto text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full">{anomalies.length} detected</span>
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2.5 py-1">⚠ Illustrative model</span>
+                <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full">{anomalies.length} detected</span>
+              </div>
             </div>
           </div>
 
