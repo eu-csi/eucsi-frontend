@@ -1,0 +1,1729 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EU Forecast Dashboard API",
+    "description": "EU Sustainability Forecast Index REST API — Unified metric_values schema",
+    "version": "2.0.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health Check",
+        "description": "Check API and database health",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "Stats"
+        ],
+        "summary": "Get Stats",
+        "description": "Get overall database statistics",
+        "operationId": "get_stats_api_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics": {
+      "get": {
+        "tags": [
+          "Metrics"
+        ],
+        "summary": "List Metrics",
+        "description": "List all available metrics with summary statistics",
+        "operationId": "list_metrics_api_metrics_get",
+        "parameters": [
+          {
+            "name": "sdg",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by SDG number (e.g. 7, 13)",
+              "title": "Sdg"
+            },
+            "description": "Filter by SDG number (e.g. 7, 13)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MetricSummary"
+                  },
+                  "title": "Response List Metrics Api Metrics Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metrics/{metric_name}": {
+      "get": {
+        "tags": [
+          "Metrics"
+        ],
+        "summary": "Get Metric",
+        "description": "Get summary info for a specific metric",
+        "operationId": "get_metric_api_metrics__metric_name__get",
+        "parameters": [
+          {
+            "name": "metric_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Metric Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sdgs": {
+      "get": {
+        "tags": [
+          "SDGs"
+        ],
+        "summary": "List Sdgs",
+        "description": "List all SDGs with their metrics (derived from metric_name prefixes)",
+        "operationId": "list_sdgs_api_sdgs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SDGInfo"
+                  },
+                  "type": "array",
+                  "title": "Response List Sdgs Api Sdgs Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sdgs/{sdg_number}": {
+      "get": {
+        "tags": [
+          "SDGs"
+        ],
+        "summary": "Get Sdg",
+        "description": "Get details for a specific SDG",
+        "operationId": "get_sdg_api_sdgs__sdg_number__get",
+        "parameters": [
+          {
+            "name": "sdg_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Sdg Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SDGInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/countries": {
+      "get": {
+        "tags": [
+          "Countries"
+        ],
+        "summary": "List Countries",
+        "description": "List all countries present in the data with summary info",
+        "operationId": "list_countries_api_countries_get",
+        "parameters": [
+          {
+            "name": "eu27_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only return EU27 countries",
+              "default": false,
+              "title": "Eu27 Only"
+            },
+            "description": "Only return EU27 countries"
+          },
+          {
+            "name": "region",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by region name",
+              "title": "Region"
+            },
+            "description": "Filter by region name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CountryMetricSummary"
+                  },
+                  "title": "Response List Countries Api Countries Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/countries/{country_code}": {
+      "get": {
+        "tags": [
+          "Countries"
+        ],
+        "summary": "Get Country",
+        "description": "Get summary for a specific country",
+        "operationId": "get_country_api_countries__country_code__get",
+        "parameters": [
+          {
+            "name": "country_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Country Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CountryMetricSummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/data/{metric_name}": {
+      "get": {
+        "tags": [
+          "Data"
+        ],
+        "summary": "Get Metric Data",
+        "description": "Get raw data for a specific metric.\nSupports filtering by country, forecast/historical, year, and date range.",
+        "operationId": "get_metric_data_api_data__metric_name__get",
+        "parameters": [
+          {
+            "name": "metric_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Metric Name"
+            }
+          },
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by country code (e.g. DE, FR)",
+              "title": "Country Code"
+            },
+            "description": "Filter by country code (e.g. DE, FR)"
+          },
+          {
+            "name": "is_forecast",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter: true=forecast, false=historical",
+              "title": "Is Forecast"
+            },
+            "description": "Filter: true=forecast, false=historical"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by year",
+              "title": "Year"
+            },
+            "description": "Filter by year"
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Start date (YYYY-MM-DD)",
+              "title": "Date From"
+            },
+            "description": "Start date (YYYY-MM-DD)"
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "End date (YYYY-MM-DD)",
+              "title": "Date To"
+            },
+            "description": "End date (YYYY-MM-DD)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50000,
+              "minimum": 1,
+              "description": "Max rows returned",
+              "default": 1000,
+              "title": "Limit"
+            },
+            "description": "Max rows returned"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Offset for pagination",
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "Offset for pagination"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MetricValueResponse"
+                  },
+                  "title": "Response Get Metric Data Api Data  Metric Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/data/{metric_name}/countries": {
+      "get": {
+        "tags": [
+          "Data"
+        ],
+        "summary": "Get Metric Countries",
+        "description": "List all countries that have data for a specific metric",
+        "operationId": "get_metric_countries_api_data__metric_name__countries_get",
+        "parameters": [
+          {
+            "name": "metric_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Metric Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/data/{metric_name}/years": {
+      "get": {
+        "tags": [
+          "Data"
+        ],
+        "summary": "Get Metric Years",
+        "description": "List all years (and months) available for a specific metric",
+        "operationId": "get_metric_years_api_data__metric_name__years_get",
+        "parameters": [
+          {
+            "name": "metric_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Metric Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/timeseries/{metric_name}/{country_code}": {
+      "get": {
+        "tags": [
+          "Time Series"
+        ],
+        "summary": "Get Timeseries",
+        "description": "Get full time series (historical + forecast) for a metric/country pair.\nIdeal for frontend charting — returns data sorted by date.",
+        "operationId": "get_timeseries_api_timeseries__metric_name___country_code__get",
+        "parameters": [
+          {
+            "name": "metric_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Metric Name"
+            }
+          },
+          {
+            "name": "country_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Country Code"
+            }
+          },
+          {
+            "name": "date_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date From"
+            }
+          },
+          {
+            "name": "date_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TimeSeriesPoint"
+                  },
+                  "title": "Response Get Timeseries Api Timeseries  Metric Name   Country Code  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compare/countries": {
+      "get": {
+        "tags": [
+          "Comparison"
+        ],
+        "summary": "Compare Countries",
+        "description": "Compare a metric across multiple countries",
+        "operationId": "compare_countries_api_compare_countries_get",
+        "parameters": [
+          {
+            "name": "metric_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Metric to compare",
+              "title": "Metric Name"
+            },
+            "description": "Metric to compare"
+          },
+          {
+            "name": "country_codes",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated country codes (e.g. DE,FR,IT)",
+              "title": "Country Codes"
+            },
+            "description": "Comma-separated country codes (e.g. DE,FR,IT)"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by year",
+              "title": "Year"
+            },
+            "description": "Filter by year"
+          },
+          {
+            "name": "is_forecast",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter: true=forecast, false=historical",
+              "title": "Is Forecast"
+            },
+            "description": "Filter: true=forecast, false=historical"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/compare/metrics": {
+      "get": {
+        "tags": [
+          "Comparison"
+        ],
+        "summary": "Compare Metrics",
+        "description": "Compare multiple metrics for a single country",
+        "operationId": "compare_metrics_api_compare_metrics_get",
+        "parameters": [
+          {
+            "name": "country_code",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Country code (e.g. DE)",
+              "title": "Country Code"
+            },
+            "description": "Country code (e.g. DE)"
+          },
+          {
+            "name": "metric_names",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated metric names",
+              "title": "Metric Names"
+            },
+            "description": "Comma-separated metric names"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by year",
+              "title": "Year"
+            },
+            "description": "Filter by year"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/snapshot/{metric_name}/{year}": {
+      "get": {
+        "tags": [
+          "Snapshot"
+        ],
+        "summary": "Get Snapshot",
+        "description": "Cross-country snapshot: latest value per country for a given metric & year.\nUseful for maps, bar charts, and rankings.",
+        "operationId": "get_snapshot_api_snapshot__metric_name___year__get",
+        "parameters": [
+          {
+            "name": "metric_name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Metric Name"
+            }
+          },
+          {
+            "name": "year",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Year"
+            }
+          },
+          {
+            "name": "month",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 12,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Specific month (1-12)",
+              "title": "Month"
+            },
+            "description": "Specific month (1-12)"
+          },
+          {
+            "name": "eu27_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Only EU27 countries",
+              "default": false,
+              "title": "Eu27 Only"
+            },
+            "description": "Only EU27 countries"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/profile/{country_code}": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "summary": "Get Country Profile",
+        "description": "Full country profile: latest value for every metric, grouped by SDG.\nGreat for country detail pages.",
+        "operationId": "get_country_profile_api_profile__country_code__get",
+        "parameters": [
+          {
+            "name": "country_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Country Code"
+            }
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Year for latest values (defaults to most recent)",
+              "title": "Year"
+            },
+            "description": "Year for latest values (defaults to most recent)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search/countries": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search Countries",
+        "description": "Search countries by name or country code",
+        "operationId": "search_countries_api_search_countries_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Search by name or code",
+              "title": "Q"
+            },
+            "description": "Search by name or code"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CountryInfo"
+                  },
+                  "title": "Response Search Countries Api Search Countries Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/search/metrics": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Search Metrics",
+        "description": "Search metrics by name (partial match)",
+        "operationId": "search_metrics_api_search_metrics_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Search by metric name",
+              "title": "Q"
+            },
+            "description": "Search by metric name"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MetricSummary"
+                  },
+                  "title": "Response Search Metrics Api Search Metrics Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/years": {
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Get Available Years",
+        "description": "Get all available years in the dataset, split by historical/forecast",
+        "operationId": "get_available_years_api_years_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/regions": {
+      "get": {
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "List Regions",
+        "description": "List all regions and their member countries",
+        "operationId": "list_regions_api_regions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/latest/{country_code}": {
+      "get": {
+        "tags": [
+          "Data"
+        ],
+        "summary": "Get Latest Values",
+        "description": "Get the latest available value for each metric for a country.\nUseful for dashboard overview cards.",
+        "operationId": "get_latest_values_api_latest__country_code__get",
+        "parameters": [
+          {
+            "name": "country_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Country Code"
+            }
+          },
+          {
+            "name": "is_forecast",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by forecast/historical",
+              "title": "Is Forecast"
+            },
+            "description": "Filter by forecast/historical"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Info"
+        ],
+        "summary": "Root",
+        "description": "API root with documentation links",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CountryInfo": {
+        "properties": {
+          "country_code": {
+            "type": "string",
+            "title": "Country Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "region": {
+            "type": "string",
+            "title": "Region"
+          },
+          "is_eu27": {
+            "type": "boolean",
+            "title": "Is Eu27"
+          }
+        },
+        "type": "object",
+        "required": [
+          "country_code",
+          "name",
+          "region",
+          "is_eu27"
+        ],
+        "title": "CountryInfo"
+      },
+      "CountryMetricSummary": {
+        "properties": {
+          "country_code": {
+            "type": "string",
+            "title": "Country Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "region": {
+            "type": "string",
+            "title": "Region"
+          },
+          "is_eu27": {
+            "type": "boolean",
+            "title": "Is Eu27"
+          },
+          "metrics_count": {
+            "type": "integer",
+            "title": "Metrics Count"
+          },
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          },
+          "min_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Date"
+          },
+          "max_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "country_code",
+          "name",
+          "region",
+          "is_eu27",
+          "metrics_count",
+          "total_records",
+          "min_date",
+          "max_date"
+        ],
+        "title": "CountryMetricSummary"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "MetricSummary": {
+        "properties": {
+          "metric_name": {
+            "type": "string",
+            "title": "Metric Name"
+          },
+          "sdg_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdg Number"
+          },
+          "sdg_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sdg Title"
+          },
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          },
+          "historical_records": {
+            "type": "integer",
+            "title": "Historical Records"
+          },
+          "forecast_records": {
+            "type": "integer",
+            "title": "Forecast Records"
+          },
+          "countries": {
+            "type": "integer",
+            "title": "Countries"
+          },
+          "min_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Date"
+          },
+          "max_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metric_name",
+          "sdg_number",
+          "sdg_title",
+          "total_records",
+          "historical_records",
+          "forecast_records",
+          "countries",
+          "min_date",
+          "max_date"
+        ],
+        "title": "MetricSummary"
+      },
+      "MetricValueResponse": {
+        "properties": {
+          "metric_name": {
+            "type": "string",
+            "title": "Metric Name"
+          },
+          "country_code": {
+            "type": "string",
+            "title": "Country Code"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "is_forecast": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Forecast"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "p_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Low"
+          },
+          "p_med": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Med"
+          },
+          "p_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P High"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metric_name",
+          "country_code",
+          "date",
+          "value",
+          "is_forecast",
+          "category",
+          "confidence",
+          "p_low",
+          "p_med",
+          "p_high"
+        ],
+        "title": "MetricValueResponse"
+      },
+      "SDGInfo": {
+        "properties": {
+          "sdg_number": {
+            "type": "integer",
+            "title": "Sdg Number"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "metrics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Metrics"
+          },
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sdg_number",
+          "title",
+          "metrics",
+          "total_records"
+        ],
+        "title": "SDGInfo"
+      },
+      "StatsResponse": {
+        "properties": {
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          },
+          "total_metrics": {
+            "type": "integer",
+            "title": "Total Metrics"
+          },
+          "total_countries": {
+            "type": "integer",
+            "title": "Total Countries"
+          },
+          "total_sdgs": {
+            "type": "integer",
+            "title": "Total Sdgs"
+          },
+          "historical_records": {
+            "type": "integer",
+            "title": "Historical Records"
+          },
+          "forecast_records": {
+            "type": "integer",
+            "title": "Forecast Records"
+          },
+          "min_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Date"
+          },
+          "max_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Date"
+          },
+          "min_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Year"
+          },
+          "max_year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Year"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_records",
+          "total_metrics",
+          "total_countries",
+          "total_sdgs",
+          "historical_records",
+          "forecast_records",
+          "min_date",
+          "max_date",
+          "min_year",
+          "max_year"
+        ],
+        "title": "StatsResponse"
+      },
+      "TimeSeriesPoint": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "is_forecast": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Forecast"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "p_low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Low"
+          },
+          "p_med": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P Med"
+          },
+          "p_high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P High"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "value",
+          "is_forecast",
+          "confidence",
+          "p_low",
+          "p_med",
+          "p_high"
+        ],
+        "title": "TimeSeriesPoint"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

@@ -38,6 +38,7 @@ interface ApiHealthResponse {
   status?: string;
   version?: string;
   name?: string;
+  models?: Record<string, unknown>;
 }
 
 // ─── CLUSTER META ────────────────────────────────────────────────────────────
@@ -72,7 +73,6 @@ function useAllCountries() {
     staleTime: 1000 * 60 * 10,
     retry: 1,
     queryFn: async () => {
-      // Fetch countries list and latest CSI scores in parallel
       const [countriesRes, csiRes] = await Promise.all([
         fetch(`${API_BASE}/api/countries`),
         fetch(`${API_BASE}/api/csi-scores/latest`)
@@ -92,20 +92,27 @@ function useAllCountries() {
 
       const csiMap = new Map<string, any>();
       csiList.forEach((c: any) => {
-        csiMap.set(c.country_iso2.toUpperCase(), c);
+        csiMap.set(c.country_iso2?.toUpperCase?.() ?? c.countryiso2?.toUpperCase?.(), c);
       });
+
+      const staticSorted = [...COUNTRY_SDG_SCORES].sort((a, b) => b.csi - a.csi);
 
       const matchedRecords: LiveCountryRecord[] = COUNTRY_SDG_SCORES.map((staticCountry) => {
         const code = staticCountry.countryCode.toUpperCase();
         const dbCountry = countriesMap.get(code);
         const dbCsi = csiMap.get(code);
 
+        const fallbackRank =
+          staticSorted.findIndex((c) => c.countryCode?.toUpperCase() === code) + 1 || 0;
+
         return {
           ...staticCountry,
-          csi: dbCsi ? dbCsi.csi_score : staticCountry.csi,
-          cluster: (dbCsi ? dbCsi.cluster : staticCountry.cluster) as any,
-          rank: dbCsi ? dbCsi.eu_rank : staticCountry.rank,
-          percentile: dbCsi ? dbCsi.eu_percentile : staticCountry.percentile,
+          csi: dbCsi ? (dbCsi.csi_score ?? dbCsi.csiscore ?? staticCountry.csi) : staticCountry.csi,
+          cluster: (dbCsi ? (dbCsi.cluster ?? staticCountry.cluster) : staticCountry.cluster) as any,
+          rank: dbCsi ? (dbCsi.eu_rank ?? dbCsi.eurank ?? fallbackRank) : fallbackRank,
+          percentile: dbCsi
+            ? (dbCsi.eu_percentile ?? dbCsi.eupercentile ?? staticCountry.percentile)
+            : staticCountry.percentile,
           lat: dbCountry ? parseFloat(dbCountry.latitude) || staticCountry.lat : staticCountry.lat,
           lon: dbCountry ? parseFloat(dbCountry.longitude) || staticCountry.lon : staticCountry.lon,
           year: 2024,
@@ -113,7 +120,6 @@ function useAllCountries() {
         } as LiveCountryRecord;
       });
 
-      // Sort by CSI score descending to compute correct ranks and percentiles
       return matchedRecords.sort((a, b) => b.csi - a.csi).map((r, i) => ({
         ...r,
         rank: i + 1,
@@ -139,12 +145,12 @@ function useApiHealth() {
 function useCountryOverview(countryName: string | null) {
   return useQuery<{
     country: string;
-    csi: number | null;       // compositeCsi from per-country endpoint
+    csi: number | null;
     percentile: number | null;
     sdgAchievementRate: number;
     cluster: ClusterName | null;
     sdgScores: Record<number, number | null>;
-    liveSDGIds: Set<number>;  // SDG IDs that have actual DB data
+    liveSDGIds: Set<number>;
     timestamp: string;
   }>({
     queryKey: ["country-overview", countryName],
@@ -156,7 +162,8 @@ function useCountryOverview(countryName: string | null) {
 
       const mappedScores: Record<number, number | null> = {};
       const liveSDGIds = new Set<number>();
-      Object.entries(data.sdgScores).forEach(([_, val]: [string, any]) => {
+
+      Object.entries(data.sdgScores ?? {}).forEach(([_, val]: [string, any]) => {
         mappedScores[val.id] = val.score;
         if (val.score !== null) liveSDGIds.add(val.id);
       });
@@ -167,13 +174,15 @@ function useCountryOverview(countryName: string | null) {
         ? Math.round((over70Count / nonNullScores.length) * 100)
         : 0;
 
-      const mockCountry = COUNTRY_SDG_SCORES.find(c => c.country.toLowerCase() === countryName!.toLowerCase());
+      const mockCountry = COUNTRY_SDG_SCORES.find(
+        c => c.country.toLowerCase() === countryName!.toLowerCase()
+      );
       const cluster = (mockCountry?.cluster ?? null) as ClusterName | null;
 
       return {
         country: data.country,
-        csi: data.compositeCsi,          // null if not in DB for 2024
-        percentile: null,                 // will use liveRecord instead
+        csi: data.csi ?? null,
+        percentile: null,
         sdgAchievementRate,
         cluster,
         sdgScores: mappedScores,
@@ -277,22 +286,15 @@ function CountryDetailPanel({
   const { data: overview, isLoading, error } = useCountryOverview(countryName);
   const staticData = COUNTRY_SDG_SCORES.find((c) => c.country === countryName);
 
-  // CSI: prefer liveRecord (from global /api/csi-scores/latest) so it matches the map.
-  // Fall back to overview.csi (per-country endpoint), then static cache.
   const rawCsi = liveRecord?.csi ?? overview?.csi ?? staticData?.csi ?? null;
   const displayCsiStr = rawCsi !== null ? rawCsi.toFixed(1) : "N/A";
 
-  // Percentile: comes from liveRecord (computed server-side from global ranking)
   const rawPercentile = liveRecord?.percentile ?? overview?.percentile ?? staticData?.percentile ?? null;
   const displayPercentileStr = rawPercentile !== null ? `P${Math.round(rawPercentile)}` : "N/A";
 
-  // Cluster: liveRecord is authoritative (assigned by DB)
   const displayCluster = liveRecord?.cluster ?? overview?.cluster ?? staticData?.cluster ?? "";
-
-  // SDG achievement rate: count non-null live SDG scores only
   const displayAchRate = overview?.sdgAchievementRate ?? liveRecord?.sdgAchievementRate ?? 0;
 
-  // SDG scores: use overview (live per-SDG fetch) when available
   const sdgScores = overview?.sdgScores ?? staticData?.sdgScores ?? {};
   const liveSDGIds = overview?.liveSDGIds ?? new Set<number>();
   const hasLiveData = !!overview;
@@ -314,7 +316,6 @@ function CountryDetailPanel({
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        {/* CSI — sourced from global /api/csi-scores/latest to match the map */}
         <div className="bg-blue-50 rounded-lg p-3 text-center">
           <p className="text-2xl font-black font-display text-blue-700">
             {isLoading && !liveRecord ? "…" : displayCsiStr}
@@ -325,7 +326,6 @@ function CountryDetailPanel({
           </p>
         </div>
 
-        {/* Percentile — from global ranking */}
         <div className="bg-slate-50 rounded-lg p-3 text-center">
           <p className="text-2xl font-black font-display text-slate-700">
             {displayPercentileStr}
@@ -335,7 +335,6 @@ function CountryDetailPanel({
           </p>
         </div>
 
-        {/* SDG Achievement Rate */}
         <div className="bg-green-50 rounded-lg p-3 text-center">
           <p className="text-2xl font-black font-display text-green-700">
             {isLoading ? "…" : `${displayAchRate}%`}
@@ -390,7 +389,6 @@ function CountryDetailPanel({
                   <span className="text-[10px] text-slate-300 italic shrink-0">N/A</span>
                 ) : (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {/* Green dot = actual DB data; amber dot = calculated from metrics */}
                     <div
                       className={`w-1 h-1 rounded-full ${isLiveScore ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" : "bg-amber-400"}`}
                       title={isLiveScore ? "Live DB value" : "Calculated from metrics"}
