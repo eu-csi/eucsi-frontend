@@ -1,6 +1,64 @@
-import { useQuery, UseQueryResult } from "@tanstack/react-query";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { SDG_DEFINITIONS } from "@/data/sdgData";
 
-const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
+const API_BASE =
+  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://187.127.164.121:8002";
+
+const UI_TO_DB_METRIC_MAP: Record<string, string> = {
+  airPollutionExposure: "SDG3_AIR_POLLUTION_EXPOSURE",
+  greenSpaceDeficit: "SDG3_GREEN_SPACE_DEFICIT",
+  healthRiskScore: "SDG3_HEALTH_RISK_PROXY_SCORE",
+  genderEmploymentGap: "SDG5_GENDER_GAP",
+  weiPlus: "SDG6_WEI_PLUS",
+  renewableShare: "SDG7_RES",
+  energyIntensity: "SDG7_ENERGY_CONSUMPTION",
+  aimForecast: "SDG7_AIM",
+  distributionLosses: "SDG7_DL",
+  gdpPerCapita: "SDG8_GDP_PER_CAPITA",
+  employmentRate: "SDG8_EMPLOYMENT_RATE",
+  gdpGrowthTrend: "SDG8_GDP_GROWTH_TREND",
+  infrastructureModernity: "SDG9_INFRASTRUCTURE_MODERNITY_INDEX",
+  energyProductivity: "SDG9_ENERGY_PRODUCTIVITY_SCORE",
+  transportInfraScore: "SDG9_TRANSPORT_MODAL_SPLIT",
+  genderEmploymentGapSdg10: "SDG10_GENDER_EMPLOYMENT_GAP",
+  gdpDisparityIndex: "SDG10_GDP_PER_CAPITA",
+  interCountryInequalityScore: "SDG10_INTER_CITY_INEQUALITY_SCORE",
+  aqiPm25: "SDG11_AQI_PM25_EXPOSURE",
+  greenSpacePerCapita: "SDG11_GREEN_SPACE_PER_CAPITA",
+  greenInfraShare: "SDG11_GREEN_INFRASTRUCTURE_SHARE",
+  populationDensity: "SDG11_SETTLEMENT_AREA_PER_CAPITA",
+  publicTransportShare: "SDG11_PUBLIC_TRANSPORT_MODAL_SPLIT",
+  trafficCongestionIndex: "SDG11_TRAFFIC_CONGESTION_INDEX",
+  recyclingRate: "SDG12_RECYCLING_RATE",
+  wastePerCapita: "SDG12_MUNICIPAL_WASTE_PER_CAPITA",
+  compostingRate: "SDG12_COMPOSTING_RATE",
+  wasteReductionTrend: "SDG12_WASTE_REDUCTION_TREND",
+  ghgPerCapita: "SDG13_GHG_EMISSIONS_PER_CAPITA",
+  carbonIntensityEconomy: "SDG13_CARBON_INTENSITY",
+  totalGhgEmissions: "SDG13_TOTAL_GHG_EMISSIONS",
+  emissionsReductionTrend: "SDG13_EMISSIONS_REDUCTION_TREND",
+  urbanGreenCoverage: "SDG15_URBAN_GREEN_COVERAGE",
+  greenSpacePerCapitaSdg15: "SDG15_GREEN_SPACE_PER_CAPITA",
+  greenInfraGap: "SDG15_GREEN_INFRASTRUCTURE_GAP",
+  urbanBiodiversityProxy: "SDG15_URBAN_BIODIVERSITY_PROXY_SCORE",
+  datasetCoverage: "SDG17_DATASET_COVERAGE_SCORE",
+  dataFreshnessIndex: "SDG17_DATA_FRESHNESS_INDEX",
+  openDataCompliance: "SDG17_OPEN_DATA_COMPLIANCE_RATE",
+  crossSdgCoverage: "SDG17_CROSS_SDG_COVERAGE_RATE",
+};
+
+export function getDbMetricName(sdgId: number, uiKey: string): string {
+  if (uiKey === "genderEmploymentGap") {
+    return sdgId === 10 ? "SDG10_GENDER_EMPLOYMENT_GAP" : "SDG5_GENDER_GAP";
+  }
+  if (uiKey === "greenSpacePerCapita") {
+    return sdgId === 15 ? "SDG15_GREEN_SPACE_PER_CAPITA" : "SDG11_GREEN_SPACE_PER_CAPITA";
+  }
+  return (
+    UI_TO_DB_METRIC_MAP[uiKey] ||
+    `SDG${sdgId}_${uiKey.replace(/([A-Z])/g, "_$1").toUpperCase()}`
+  );
+}
 
 async function apiFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -13,6 +71,25 @@ async function apiFetch<T>(path: string): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeIso2(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase();
+}
+
+function safeArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
 }
 
 export type ClusterName =
@@ -71,7 +148,7 @@ export interface SDGScore {
   sdg_number: number;
   sdg_title: string;
   year: number;
-  normalised_score: number;
+  normalised_score: number | null;
   data_type: string;
 }
 
@@ -147,21 +224,26 @@ export interface CountrySdgScore {
   id: number;
   sdgId: number;
   label: string;
-  score: number;
+  title: string;
+  score: number | null;
   trend: number;
   rank: number;
   metrics: CountrySdgMetric[];
   year: number;
+  euComparison?: string;
+  waterStress?: string;
+  status?: string;
+  note?: string;
 }
 
 export interface DashboardScoresResponse {
   country: string;
-  csi: number;
-  percentile: number;
+  csi: number | null;
+  percentile: number | null;
   sdgAchievementRate: number;
-  cluster: ClusterName;
-  sdgScores: Record<number, number>;
-  liveSDGIds: Set<number>;
+  cluster: ClusterName | null;
+  sdgScores: Record<number, number | null>;
+  liveSDGIds: number[];
   timestamp: string;
 }
 
@@ -173,17 +255,24 @@ export interface FetchCountrySdgScoresResponse {
     region: string;
   };
   compositeCsi: number | null;
+  percentile?: number | null;
+  cluster?: ClusterName | null;
   timestamp: string;
+  dataSource: string;
   sdgScores: CountrySdgScore[];
 }
 
 export interface IndicatorPoint {
   year: number;
   value: number;
+  is_forecast?: boolean;
+  conf_low?: number | null;
+  conf_high?: number | null;
 }
 
 export interface IndicatorSeries {
   metricId: number;
+  metricKey?: string;
   metricName: string;
   unit: string;
   direction: "higher_better" | "lower_better";
@@ -194,148 +283,18 @@ export interface FetchIndicatorDataResponse {
   data: IndicatorSeries[];
 }
 
-async function fetchCountriesRaw(region?: string): Promise<Country[]> {
-  const query = region ? `?region=${encodeURIComponent(region)}` : "";
-  return apiFetch<Country[]>(`/api/countries${query}`);
+export interface MetricBenchmarkCountryValue {
+  country: string;
+  iso2: string;
+  value: number;
 }
 
-export async function fetchCountriesList(region?: string): Promise<Country[]> {
-  return fetchCountriesRaw(region);
-}
-
-export async function fetchCountryById(countryId: number): Promise<Country> {
-  return apiFetch<Country>(`/api/countries/${countryId}`);
-}
-
-export async function fetchCountryByIso2(iso2: string): Promise<Country> {
-  return apiFetch<Country>(`/api/countries/iso2/${iso2.toUpperCase()}`);
-}
-
-export async function fetchSDGs(): Promise<SDGInfo[]> {
-  return apiFetch<SDGInfo[]>("/api/sdgs");
-}
-
-export async function fetchSDGById(sdgId: number): Promise<SDGInfo> {
-  return apiFetch<SDGInfo>(`/api/sdgs/${sdgId}`);
-}
-
-export async function fetchMetrics(sdgId?: number): Promise<Metric[]> {
-  const query = typeof sdgId === "number" ? `?sdg_id=${sdgId}` : "";
-  return apiFetch<Metric[]>(`/api/metrics${query}`);
-}
-
-export async function fetchMetricById(metricId: number): Promise<Metric> {
-  return apiFetch<Metric>(`/api/metrics/${metricId}`);
-}
-
-export async function fetchLatestCSIScores(): Promise<CSIScore[]> {
-  return apiFetch<CSIScore[]>("/api/csi-scores/latest");
-}
-
-export async function fetchCSIScoresByCountry(
-  countryId: number,
-  year?: number
-): Promise<CSIScore[]> {
-  const query = typeof year === "number" ? `?year=${year}` : "";
-  return apiFetch<CSIScore[]>(`/api/csi-scores/country/${countryId}${query}`);
-}
-
-export async function fetchCSIScoresByYear(year: number): Promise<CSIScore[]> {
-  return apiFetch<CSIScore[]>(`/api/csi-scores/year/${year}`);
-}
-
-export async function fetchSDGScoresByCountryYear(
-  countryId: number,
-  year: number
-): Promise<SDGScore[]> {
-  return apiFetch<SDGScore[]>(`/api/sdg-scores/country/${countryId}/year/${year}`);
-}
-
-export async function fetchSDGScoresBySDGYear(
-  sdgId: number,
-  year: number
-): Promise<SDGScore[]> {
-  return apiFetch<SDGScore[]>(`/api/sdg-scores/sdg/${sdgId}/year/${year}`);
-}
-
-export async function fetchMetricValues(
-  metricId: number,
-  countryId?: number
-): Promise<MetricValue[]> {
-  const query = typeof countryId === "number" ? `?country_id=${countryId}` : "";
-  return apiFetch<MetricValue[]>(`/api/metric-values/metric/${metricId}${query}`);
-}
-
-export async function fetchMetricValuesForCountryYear(
-  countryId: number,
-  year: number
-): Promise<MetricValue[]> {
-  return apiFetch<MetricValue[]>(`/api/metric-values/country/${countryId}/year/${year}`);
-}
-
-export async function fetchCSIRankings(year: number): Promise<CountryRankingResponse[]> {
-  return apiFetch<CountryRankingResponse[]>(`/api/rankings/csi/${year}`);
-}
-
-export async function fetchSDGRankings(
-  sdgId: number,
-  year: number
-): Promise<SDGRankingRow[]> {
-  return apiFetch<SDGRankingRow[]>(`/api/rankings/sdg/${sdgId}/${year}`);
-}
-
-export async function fetchAnomalies(
-  metricId?: number,
-  countryId?: number
-): Promise<AnomalyResponse[]> {
-  const params = new URLSearchParams();
-  if (typeof metricId === "number") params.set("metric_id", String(metricId));
-  if (typeof countryId === "number") params.set("country_id", String(countryId));
-  const query = params.toString() ? `?${params.toString()}` : "";
-  return apiFetch<AnomalyResponse[]>(`/api/anomalies${query}`);
-}
-
-export async function fetchStats(): Promise<StatsResponse> {
-  return apiFetch<StatsResponse>("/api/stats");
-}
-
-export async function fetchHealth(): Promise<ApiHealthResponse> {
-  const health = await apiFetch<{
-    status: string;
-    database: string;
-    countries_loaded: number;
-    timestamp: string;
-  }>("/health");
-
-  return {
-    ...health,
-    models: ["countries", "sdg_scores", "csi_scores", "metric_values", "anomalies"],
-  };
-}
-
-export async function resolveCountryId(
-  countryNameOrCode: string
-): Promise<number | null> {
-  const normalized = countryNameOrCode.trim().toLowerCase();
-  if (!normalized) return null;
-
-  const countries = await fetchCountriesRaw();
-  const match = countries.find(
-    (country) =>
-      country.name.toLowerCase() === normalized ||
-      country.iso2.toLowerCase() === normalized ||
-      country.iso3.toLowerCase() === normalized
-  );
-
-  return match?.country_id ?? null;
-}
-
-function calculateTrend(current: number, previous?: number): number {
-  if (typeof previous !== "number") return 0;
+function calculateTrend(current: number | null, previous?: number | null): number {
+  if (typeof current !== "number" || typeof previous !== "number") return 0;
   return Number((current - previous).toFixed(2));
 }
 
-function toClusterName(value?: string | null): ClusterName {
+function toClusterName(value?: string | null): ClusterName | null {
   if (
     value === "Nordic Leaders" ||
     value === "Western Innovators" ||
@@ -345,7 +304,338 @@ function toClusterName(value?: string | null): ClusterName {
   ) {
     return value;
   }
-  return "Western Innovators";
+  return null;
+}
+
+async function fetchCountriesRaw(region?: string): Promise<Country[]> {
+  const [listRaw, detailsRaw] = await Promise.all([
+    apiFetch<any[]>("/api/countries-list").catch(() => []),
+    apiFetch<any[]>("/api/countries").catch(() => []),
+  ]);
+
+  const list = safeArray<any>(listRaw);
+  const details = safeArray<any>(detailsRaw);
+
+  const merged = list.map((item, index) => {
+    const detail = details.find((d) => normalizeIso2(d.iso2) === normalizeIso2(item.iso2));
+    return {
+      country_id: toNumber(item.country_id ?? index + 1),
+      iso2: String(item.iso2 ?? "").toUpperCase(),
+      iso3: String(item.iso3 ?? item.iso2 ?? "").toUpperCase(),
+      name: String(item.name ?? detail?.name ?? ""),
+      is_eu27: Boolean(item.is_eu27 ?? detail?.is_eu27 ?? false),
+      latitude: toNumber(detail?.latitude, 0),
+      longitude: toNumber(detail?.longitude, 0),
+      region: String(detail?.region ?? item.region ?? "Other"),
+    } as Country;
+  });
+
+  if (region) {
+    return merged.filter((c) => c.region.toLowerCase() === region.toLowerCase());
+  }
+
+  return merged;
+}
+
+export async function fetchCountriesList(region?: string): Promise<Country[]> {
+  return fetchCountriesRaw(region);
+}
+
+export async function fetchCountryById(countryId: number): Promise<Country> {
+  const countries = await fetchCountriesRaw();
+  const match = countries.find((c) => c.country_id === countryId);
+  if (!match) throw new Error(`Country not found by ID: ${countryId}`);
+  return match;
+}
+
+export async function fetchCountryByIso2(iso2: string): Promise<Country> {
+  const countries = await fetchCountriesRaw();
+  const match = countries.find((c) => c.iso2.toUpperCase() === iso2.toUpperCase());
+  if (!match) throw new Error(`Country not found by ISO2: ${iso2}`);
+  return match;
+}
+
+export async function fetchSDGs(): Promise<SDGInfo[]> {
+  return SDG_DEFINITIONS.map((d) => ({
+    sdg_id: d.id,
+    number: d.id,
+    title: d.title,
+    description: d.description,
+  }));
+}
+
+export async function fetchSDGById(sdgId: number): Promise<SDGInfo> {
+  const match = SDG_DEFINITIONS.find((d) => d.id === sdgId);
+  if (!match) throw new Error(`SDG not found: ${sdgId}`);
+  return {
+    sdg_id: match.id,
+    number: match.id,
+    title: match.title,
+    description: match.description,
+  };
+}
+
+export async function fetchMetrics(sdgId?: number): Promise<Metric[]> {
+  const data = await apiFetch<any[]>("/api/metrics").catch(() => []);
+  return safeArray<any>(data)
+    .filter((d) => sdgId === undefined || d.sdg_id === sdgId)
+    .map((d, i) => {
+      const sdgDef = SDG_DEFINITIONS.find((s) => s.id === d.sdg_id);
+      const uiMetricKey =
+        Object.keys(UI_TO_DB_METRIC_MAP).find((key) => UI_TO_DB_METRIC_MAP[key] === d.metric_name) ||
+        d.metric_name;
+      const uiMetric = sdgDef?.metrics.find((m) => m.key === uiMetricKey);
+
+      return {
+        metric_id: toNumber(d.metric_id ?? i + 1),
+        sdg_id: toNumber(d.sdg_id),
+        name: String(d.metric_name ?? d.name ?? ""),
+        source_dataset: String(d.source_dataset ?? sdgDef?.datasets?.[0] ?? "Eurostat"),
+        unit: String(uiMetric?.unit ?? d.unit ?? "%"),
+        direction: uiMetric?.higherIsBetter ? "higher_better" : "lower_better",
+        frequency: String(d.frequency ?? "annual"),
+      } as Metric;
+    });
+}
+
+export async function fetchMetricById(metricId: number): Promise<Metric> {
+  const all = await fetchMetrics();
+  const match = all.find((m) => m.metric_id === metricId);
+  if (!match) throw new Error(`Metric not found by ID: ${metricId}`);
+  return match;
+}
+
+function normalizeCsiRow(d: any, countries: Country[]): CSIScore {
+  const iso2 = normalizeIso2(d.country_iso2 ?? d.countryCode ?? d.iso2);
+  const match = countries.find((c) => c.iso2 === iso2);
+
+  return {
+    country_id: match?.country_id ?? 0,
+    country_iso2: iso2,
+    country_name: String(d.country_name ?? d.name ?? match?.name ?? iso2),
+    year: toNumber(d.year),
+    csi_score: toNumber(d.csi_score),
+    sdg_count: toNumber(d.sdg_count),
+    eu_rank: d.eu_rank == null ? null : toNumber(d.eu_rank),
+    eu_percentile: d.eu_percentile == null ? null : toNumber(d.eu_percentile),
+    cluster: d.cluster ?? null,
+    data_type: String(d.data_type ?? "historical"),
+  };
+}
+
+export async function fetchLatestCSIScores(): Promise<CSIScore[]> {
+  const [data, countries] = await Promise.all([
+    apiFetch<any[]>("/api/csi-scores/latest"),
+    fetchCountriesRaw(),
+  ]);
+  return safeArray<any>(data).map((d) => normalizeCsiRow(d, countries));
+}
+
+export async function fetchCSIScoresByCountry(countryId: number, year?: number): Promise<CSIScore[]> {
+  const country = await fetchCountryById(countryId);
+  const [data, countries] = await Promise.all([
+    apiFetch<any[]>(`/api/csi-scores/country/${country.iso2}`),
+    fetchCountriesRaw(),
+  ]);
+
+  const mapped = safeArray<any>(data).map((d) => normalizeCsiRow(d, countries));
+  return typeof year === "number" ? mapped.filter((d) => d.year === year) : mapped;
+}
+
+export async function fetchCSIScoresByYear(year: number): Promise<CSIScore[]> {
+  const [data, countries] = await Promise.all([
+    apiFetch<any[]>(`/api/csi-scores/year/${year}`),
+    fetchCountriesRaw(),
+  ]);
+
+  const mapped = safeArray<any>(data).map((d) => normalizeCsiRow(d, countries));
+  const historical = mapped.filter((d) => d.data_type === "historical");
+  return historical.length > 0 ? historical : mapped;
+}
+
+function normalizeSdgRow(d: any, countries: Country[], fallbackCountryId?: number): SDGScore {
+  const iso2 = normalizeIso2(d.country_iso2 ?? d.countryCode ?? d.iso2);
+  const match = countries.find((c) => c.iso2 === iso2);
+
+  return {
+    country_id: fallbackCountryId ?? match?.country_id ?? 0,
+    country_iso2: iso2,
+    country_name: String(d.country_name ?? d.name ?? match?.name ?? iso2),
+    sdg_id: toNumber(d.sdg_id),
+    sdg_number: toNumber(d.sdg_number ?? d.sdg_id),
+    sdg_title: String(d.sdg_title ?? d.title ?? `SDG ${d.sdg_id}`),
+    year: toNumber(d.year),
+    normalised_score:
+      d.normalised_score != null
+        ? toNullableNumber(d.normalised_score)
+        : toNullableNumber(d.score),
+    data_type: String(d.data_type ?? "historical"),
+  };
+}
+
+export async function fetchSDGScoresByCountryYear(countryId: number, year: number): Promise<SDGScore[]> {
+  const country = await fetchCountryById(countryId);
+  const [data, countries] = await Promise.all([
+    apiFetch<any[]>(`/api/sdg-scores/country/${country.iso2}/year/${year}`),
+    fetchCountriesRaw(),
+  ]);
+
+  const mapped = safeArray<any>(data).map((d) => normalizeSdgRow(d, countries, countryId));
+  const historical = mapped.filter((d) => d.data_type === "historical");
+  return historical.length > 0 ? historical : mapped;
+}
+
+export async function fetchSDGScoresBySDGYear(sdgId: number, year: number): Promise<SDGScore[]> {
+  const [data, countries] = await Promise.all([
+    apiFetch<any[]>(`/api/sdg-scores/sdg/${sdgId}/year/${year}`),
+    fetchCountriesRaw(),
+  ]);
+
+  const mapped = safeArray<any>(data).map((d) => normalizeSdgRow(d, countries));
+  const historical = mapped.filter((d) => d.data_type === "historical");
+  return historical.length > 0 ? historical : mapped;
+}
+
+export async function fetchMetricValues(_metricId: number, _countryId?: number): Promise<MetricValue[]> {
+  return [];
+}
+
+export async function fetchMetricValuesForCountryYear(
+  _countryId: number,
+  _year: number
+): Promise<MetricValue[]> {
+  return [];
+}
+
+export async function fetchCSIRankings(year: number): Promise<CountryRankingResponse[]> {
+  const [data, countries] = await Promise.all([
+    apiFetch<any[]>(`/api/rankings/csi/${year}`).catch(() => []),
+    fetchCountriesRaw(),
+  ]);
+
+  return safeArray<any>(data).map((d, index) => {
+    const iso2 = normalizeIso2(d.iso2 ?? d.country_iso2);
+    const match = countries.find((c) => c.iso2 === iso2);
+
+    return {
+      rank: toNumber(d.rank ?? index + 1),
+      country_id: match?.country_id ?? 0,
+      iso2,
+      name: String(d.name ?? d.country_name ?? match?.name ?? iso2),
+      region: String(d.region ?? match?.region ?? "Other"),
+      is_eu27: Boolean(d.is_eu27 ?? match?.is_eu27 ?? false),
+      csi_score: toNumber(d.csi_score),
+      cluster: String(d.cluster ?? ""),
+      year: toNumber(d.year ?? year),
+    };
+  });
+}
+
+export async function fetchSDGRankings(sdgId: number, year: number): Promise<SDGRankingRow[]> {
+  const [scores, countries] = await Promise.all([
+    fetchSDGScoresBySDGYear(sdgId, year),
+    fetchCountriesRaw(),
+  ]);
+
+  return scores
+    .filter((row) => typeof row.normalised_score === "number")
+    .sort((a, b) => (b.normalised_score ?? 0) - (a.normalised_score ?? 0))
+    .map((row, index) => {
+      const country = countries.find((c) => c.iso2 === row.country_iso2);
+      return {
+        rank: index + 1,
+        country_id: country?.country_id ?? row.country_id ?? 0,
+        iso2: row.country_iso2,
+        name: row.country_name,
+        region: country?.region ?? "Other",
+        score: row.normalised_score ?? 0,
+        year: row.year,
+      };
+    });
+}
+
+export async function fetchAnomalies(metricId?: number, countryId?: number): Promise<AnomalyResponse[]> {
+  const params = new URLSearchParams();
+  if (typeof countryId === "number") {
+    const country = await fetchCountryById(countryId);
+    params.set("country_code", country.iso2);
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  const response = await apiFetch<any[]>(`/api/anomalies${query}`).catch(() => []);
+  return safeArray<any>(response).map((a) => ({
+    metric_id: metricId ?? 0,
+    country_id: countryId ?? 0,
+    year: parseInt(String(a.date ?? "").substring(0, 4), 10) || 0,
+    raw_value: toNumber(a.value),
+    flag_reason: a.confidence < 0.5 ? "Low confidence" : "Extreme deviation",
+  }));
+}
+
+export async function fetchStats(): Promise<StatsResponse> {
+  const data = await apiFetch<any>("/api/stats");
+  return {
+    total_countries: toNumber(data.total_countries),
+    total_sdgs: 12,
+    total_metrics: toNumber(data.total_metrics),
+    total_metric_values: toNumber(data.total_rows ?? data.total_metric_values),
+    total_anomalies: 0,
+    years_covered: safeArray<number>(data.years_covered).map((y) => toNumber(y)),
+    latest_year: toNumber(data.latest_year),
+    earliest_year: toNumber(data.earliest_year),
+  };
+}
+
+export async function fetchHealth(): Promise<ApiHealthResponse> {
+  const health = await apiFetch<{
+    status: string;
+    database: string;
+    countries_loaded: number;
+    timestamp: string;
+    models?: string[];
+  }>("/health");
+
+  return {
+    status: health.status,
+    database: health.database,
+    countries_loaded: toNumber(health.countries_loaded),
+    timestamp: health.timestamp,
+    models: Array.isArray(health.models)
+      ? health.models
+      : ["countries", "sdg_scores", "csi_scores", "metric_values", "anomalies"],
+  };
+}
+
+export async function resolveCountryId(countryNameOrCode: string): Promise<number | null> {
+  const normalized = countryNameOrCode.trim().toLowerCase();
+  if (!normalized) return null;
+
+  const countries = await fetchCountriesRaw();
+  const match = countries.find(
+    (country) =>
+      country.name.toLowerCase() === normalized ||
+      country.iso2.toLowerCase() === normalized ||
+      (country.iso3 && country.iso3.toLowerCase() === normalized)
+  );
+
+  return match?.country_id ?? null;
+}
+
+export function getScoreColor(score: number | null): string {
+  if (score === null) return "text-slate-400";
+  if (score >= 80) return "text-green-700";
+  if (score >= 70) return "text-blue-700";
+  if (score >= 60) return "text-yellow-700";
+  if (score >= 50) return "text-orange-700";
+  return "text-red-700";
+}
+
+export function getScoreBgColor(score: number | null): string {
+  if (score === null) return "bg-slate-50";
+  if (score >= 80) return "bg-green-50";
+  if (score >= 70) return "bg-blue-50";
+  if (score >= 60) return "bg-yellow-50";
+  if (score >= 50) return "bg-orange-50";
+  return "bg-red-50";
 }
 
 export async function fetchCountrySdgScores(
@@ -355,76 +645,72 @@ export async function fetchCountrySdgScores(
   const stats = await fetchStats();
   const effectiveYear = year ?? stats.latest_year;
 
-  const countryId = await resolveCountryId(countryNameOrCode);
-  if (!countryId) {
+  const normalizedInput = countryNameOrCode.trim();
+  if (!normalizedInput) {
+    throw new Error("Country code or name is required");
+  }
+
+  const countries = await fetchCountriesRaw();
+  const normalizedLower = normalizedInput.toLowerCase();
+
+  const matchedCountry =
+    countries.find((c) => c.iso2.toLowerCase() === normalizedLower) ||
+    countries.find((c) => c.iso3.toLowerCase() === normalizedLower) ||
+    countries.find((c) => c.name.toLowerCase() === normalizedLower);
+
+  if (!matchedCountry) {
     throw new Error(`Country not found: ${countryNameOrCode}`);
   }
 
-  const country = await fetchCountryById(countryId);
+  const countryId = matchedCountry.country_id;
 
-  const [scores, previousScores, csiRows] = await Promise.all([
+  const [scores, previousScores, csiRows, rankings] = await Promise.all([
     fetchSDGScoresByCountryYear(countryId, effectiveYear),
     fetchSDGScoresByCountryYear(countryId, effectiveYear - 1).catch(() => []),
     fetchCSIScoresByCountry(countryId, effectiveYear).catch(() => []),
+    fetchCSIRankings(effectiveYear).catch(() => []),
   ]);
 
-  const previousEntries: Array<[number, number]> = previousScores.map(
-    (item): [number, number] => [item.sdg_id, item.normalised_score]
+  const previousMap = new Map<number, number | null>(
+    previousScores.map((item): [number, number | null] => [item.sdg_id, item.normalised_score])
   );
-  const previousMap = new Map<number, number>(previousEntries);
 
-  const allMetrics = await fetchMetrics();
+  const sortedScores = [...scores].sort((a, b) => a.sdg_number - b.sdg_number);
 
-  const sdgScores: CountrySdgScore[] = scores
-    .sort((a, b) => a.sdg_number - b.sdg_number)
-    .map((item, index) => {
-      const relatedMetrics = allMetrics
-        .filter((metric) => metric.sdg_id === item.sdg_id)
-        .slice(0, 3)
-        .map((metric, metricIndex) => ({
-          id: metric.metric_id,
-          name: metric.name,
-          value: item.normalised_score,
-          trend: calculateTrend(item.normalised_score, previousMap.get(item.sdg_id)),
-          benchmark: 100,
-          category:
-            metric.direction === "higher_better" ? "higher_better" : "lower_better",
-          unit: metric.unit || "",
-        }));
+  const sdgScores: CountrySdgScore[] = sortedScores.map((item, index) => ({
+    id: item.sdg_id,
+    sdgId: item.sdg_id,
+    label: item.sdg_title,
+    title: item.sdg_title,
+    score: item.normalised_score,
+    trend: calculateTrend(item.normalised_score, previousMap.get(item.sdg_id)),
+    rank: index + 1,
+    metrics: [],
+    year: item.year,
+    euComparison: undefined,
+    waterStress: undefined,
+    status: item.normalised_score == null ? "No data" : undefined,
+    note: item.normalised_score == null ? `No ${effectiveYear} score returned by API` : undefined,
+  }));
 
-      if (relatedMetrics.length === 0) {
-        relatedMetrics.push({
-          id: item.sdg_id * 100 + 1,
-          name: item.sdg_title,
-          value: item.normalised_score,
-          trend: calculateTrend(item.normalised_score, previousMap.get(item.sdg_id)),
-          benchmark: 100,
-          category: "score",
-          unit: "",
-        });
-      }
-
-      return {
-        id: item.sdg_id,
-        sdgId: item.sdg_id,
-        label: item.sdg_title,
-        score: item.normalised_score,
-        trend: calculateTrend(item.normalised_score, previousMap.get(item.sdg_id)),
-        rank: index + 1,
-        metrics: relatedMetrics,
-        year: item.year,
-      };
-    });
+  const yearCsi = csiRows.find((row) => row.year === effectiveYear) ?? null;
+  const ranking = rankings.find((row) => row.country_id === countryId);
 
   return {
     country: {
-      id: country.country_id,
-      name: country.name,
-      iso2: country.iso2,
-      region: country.region,
+      id: matchedCountry.country_id,
+      name: matchedCountry.name,
+      iso2: matchedCountry.iso2,
+      region: matchedCountry.region,
     },
-    compositeCsi: csiRows[0]?.csi_score ?? null,
+    compositeCsi: yearCsi?.csi_score ?? null,
+    percentile:
+      ranking && rankings.length > 0
+        ? Number((((rankings.length - ranking.rank + 1) / rankings.length) * 100).toFixed(2))
+        : yearCsi?.eu_percentile ?? null,
+    cluster: toClusterName(ranking?.cluster ?? yearCsi?.cluster ?? null),
     timestamp: new Date().toISOString(),
+    dataSource: "FastAPI",
     sdgScores,
   };
 }
@@ -434,39 +720,32 @@ export async function fetchSDGScores(
   year?: number
 ): Promise<DashboardScoresResponse> {
   const detailed = await fetchCountrySdgScores(countryNameOrCode, year);
-  const stats = await fetchStats();
-  const effectiveYear = year ?? stats.latest_year;
-  const rankings = await fetchCSIRankings(effectiveYear).catch(() => []);
-  const countryId = detailed.country.id;
-
-  const ranking = rankings.find((row) => row.country_id === countryId);
-  const percentile =
-    rankings.length > 0 && ranking
-      ? Number((((rankings.length - ranking.rank + 1) / rankings.length) * 100).toFixed(2))
-      : 0;
 
   const sdgScoresRecord = Object.fromEntries(
     detailed.sdgScores.map((item) => [item.sdgId, item.score])
-  ) as Record<number, number>;
+  ) as Record<number, number | null>;
 
-  const liveSDGIds = new Set<number>(detailed.sdgScores.map((item) => item.sdgId));
+  const liveSDGIds = detailed.sdgScores
+    .filter((item) => typeof item.score === "number")
+    .map((item) => item.sdgId);
+
+  const validScores = detailed.sdgScores
+    .map((item) => item.score)
+    .filter((score): score is number => typeof score === "number");
+
   const sdgAchievementRate =
-    detailed.sdgScores.length > 0
+    validScores.length > 0
       ? Number(
-        (
-          detailed.sdgScores.filter((item) => item.score >= 70).length /
-          detailed.sdgScores.length *
-          100
-        ).toFixed(2)
+        ((validScores.filter((score) => score >= 70).length / validScores.length) * 100).toFixed(2)
       )
       : 0;
 
   return {
     country: detailed.country.name,
-    csi: detailed.compositeCsi ?? 0,
-    percentile,
+    csi: detailed.compositeCsi,
+    percentile: detailed.percentile ?? null,
     sdgAchievementRate,
-    cluster: toClusterName(ranking?.cluster),
+    cluster: detailed.cluster ?? null,
     sdgScores: sdgScoresRecord,
     liveSDGIds,
     timestamp: detailed.timestamp,
@@ -475,42 +754,107 @@ export async function fetchSDGScores(
 
 export async function fetchIndicatorData(
   sdgId: number,
-  countryId?: number,
-  limitMetrics = 3
+  country: string,
+  limitMetrics?: number
 ): Promise<FetchIndicatorDataResponse> {
-  const metrics = await fetchMetrics(sdgId);
-  const selectedMetrics = metrics.slice(0, limitMetrics);
+  const sdgDef = SDG_DEFINITIONS.find((s) => s.id === sdgId);
+  if (!sdgDef) return { data: [] };
+
+  const selectedMetrics =
+    limitMetrics !== undefined ? sdgDef.metrics.slice(0, limitMetrics) : sdgDef.metrics;
 
   const series: IndicatorSeries[] = await Promise.all(
-    selectedMetrics.map(async (metric) => {
-      const values = await fetchMetricValues(metric.metric_id, countryId);
-      const filtered = values
-        .filter((row) => typeof row.raw_value === "number")
-        .sort((a, b) => a.year - b.year);
+    selectedMetrics.map(async (metric, idx) => {
+      const dbMetricName = getDbMetricName(sdgId, metric.key);
+      try {
+        const response = await apiFetch<any>(
+          `/api/indicator/${dbMetricName}?country=${encodeURIComponent(country)}&start_year=2015&end_year=2030`
+        );
 
-      return {
-        metricId: metric.metric_id,
-        metricName: metric.name,
-        unit: metric.unit,
-        direction: metric.direction,
-        data: filtered.map((row) => ({
-          year: row.year,
-          value: row.raw_value,
-        })),
-      };
+        const rawData = safeArray<any>(response.data);
+        const dataPoints = rawData
+          .map((d: any) => ({
+            year: parseInt(String(d.date ?? "").substring(0, 4), 10),
+            value: toNumber(d.value),
+            is_forecast: Boolean(d.is_forecast ?? d.isforecast ?? false),
+            conf_low: d.conf_low ?? d.conflow ?? null,
+            conf_high: d.conf_high ?? d.confhigh ?? null,
+          }))
+          .filter((d) => Number.isFinite(d.year));
+
+        return {
+          metricId: sdgId * 100 + idx + 1,
+          metricKey: metric.key,
+          metricName: metric.label,
+          unit: metric.unit,
+          direction: metric.higherIsBetter ? "higher_better" : "lower_better",
+          data: dataPoints,
+        };
+      } catch (err) {
+        console.error(`Failed to fetch indicator data for ${dbMetricName}:`, err);
+        return {
+          metricId: sdgId * 100 + idx + 1,
+          metricKey: metric.key,
+          metricName: metric.label,
+          unit: metric.unit,
+          direction: metric.higherIsBetter ? "higher_better" : "lower_better",
+          data: [],
+        };
+      }
     })
   );
 
   return { data: series };
 }
 
+export async function fetchMetricBenchmarkByCountryYear(
+  sdgId: number,
+  metricKey: string,
+  year: number
+): Promise<MetricBenchmarkCountryValue[]> {
+  const countries = await fetchCountriesRaw();
+  const dbMetricName = getDbMetricName(sdgId, metricKey);
+
+  const rows = await Promise.all(
+    countries.map(async (country) => {
+      try {
+        const response = await apiFetch<any>(
+          `/api/indicator/${dbMetricName}?country=${encodeURIComponent(country.name)}&start_year=${year}&end_year=${year}`
+        );
+
+        const rawData = safeArray<any>(response.data);
+        const exact = rawData.find((d) => {
+          const pointYear = parseInt(String(d.date ?? "").substring(0, 4), 10);
+          const isForecast = Boolean(d.is_forecast ?? d.isforecast ?? false);
+          return pointYear === year && !isForecast;
+        });
+
+        if (!exact) return null;
+
+        const value = toNullableNumber(exact.value);
+        if (value === null) return null;
+
+        return {
+          country: country.name,
+          iso2: country.iso2,
+          value,
+        } as MetricBenchmarkCountryValue;
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  return rows.filter((row): row is MetricBenchmarkCountryValue => row !== null);
+}
+
 export function useSDGScores(
-  countryNameOrCode: string,
+  countryNameOrCode: string | null,
   year?: number
 ): UseQueryResult<FetchCountrySdgScoresResponse, Error> {
   return useQuery<FetchCountrySdgScoresResponse, Error>({
     queryKey: ["country-sdg-scores", countryNameOrCode, year],
-    queryFn: () => fetchCountrySdgScores(countryNameOrCode, year),
+    queryFn: () => fetchCountrySdgScores(countryNameOrCode as string, year),
     enabled: Boolean(countryNameOrCode),
   });
 }

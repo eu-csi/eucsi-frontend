@@ -6,10 +6,9 @@ import {
 } from "lucide-react";
 import { COUNTRY_SDG_SCORES } from "@/data/sdgData";
 import type { LiveCountryRecord } from "@/types/countryTypes";
-import { Link } from "react-router-dom";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
-type SortKey = "country" | "csi" | "percentile" | "sdgAchievementRate";
+type SortKey = "country" | "csi" | "percentile";
 type SortDir = "asc" | "desc";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -221,7 +220,7 @@ export default function CountryRankingTable({
                   className="flex items-center gap-1 hover:text-slate-800 transition-colors"
                   onClick={() => handleSort("percentile")}
                 >
-                  EU Rank <SortIcon k="percentile" />
+                  EU Percentile <SortIcon k="percentile" />
                 </button>
               </th>
 
@@ -229,18 +228,7 @@ export default function CountryRankingTable({
                 YoY ▲
               </th>
 
-              <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                <button
-                  className="flex items-center gap-1 hover:text-slate-800 transition-colors"
-                  onClick={() => handleSort("sdgAchievementRate")}
-                >
-                  SDG Achieved <SortIcon k="sdgAchievementRate" />
-                </button>
-              </th>
 
-              <th className="px-4 py-3 text-[11px] font-bold text-slate-500 uppercase tracking-wide">
-                Explore
-              </th>
             </tr>
           </thead>
 
@@ -248,7 +236,7 @@ export default function CountryRankingTable({
             {sorted.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={7}
                   className="py-12 text-center text-sm text-slate-400"
                 >
                   No countries match your search.
@@ -304,38 +292,7 @@ export default function CountryRankingTable({
                       <TrendBadge change={yoy} />
                     </td>
 
-                    {/* SDG achievement bar */}
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <div className="w-20 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${country.sdgAchievementRate}%`,
-                              background:
-                                country.sdgAchievementRate >= 80 ? "#16a34a" :
-                                country.sdgAchievementRate >= 65 ? "#2563eb" :
-                                "#f59e0b",
-                            }}
-                          />
-                        </div>
-                        <span className="text-[11px] font-semibold tabular-nums">
-                          {country.sdgAchievementRate}%
-                        </span>
-                      </div>
-                    </td>
 
-                    {/* Explore link — links to country dashboard */}
-                    <td className="px-4 py-2.5">
-                      <Link
-                        to={`/country/${encodeURIComponent(country.country)}`}
-                        onClick={e => e.stopPropagation()}
-                        className="text-xs text-blue-600 hover:text-blue-800 hover:underline
-                                   font-semibold transition-colors"
-                      >
-                        View →
-                      </Link>
-                    </td>
                   </tr>
                 );
               })

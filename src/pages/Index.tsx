@@ -1,33 +1,31 @@
 // src/pages/Index.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-// EU CountryPulse — Overview Dashboard
-// Rankings are fully dynamic: fetched from GET /api/countries (FastAPI backend).
-// Static COUNTRY_SDG_SCORES is used ONLY as a fallback if the API is unreachable.
-// Cluster counts + avg CSI are derived dynamically from live ranking data.
-// ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
-  MapPin, List, TrendingUp, TrendingDown, Award,
-  Users, BarChart3, RefreshCw, Wifi, WifiOff, Database,
+  MapPin,
+  List,
+  TrendingUp,
+  TrendingDown,
+  Award,
+  Users,
+  BarChart3,
+  RefreshCw,
+  Wifi,
+  WifiOff,
+  Database,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { COUNTRY_SDG_SCORES, SDG_DEFINITIONS } from "@/data/sdgData";
 import CountryMap from "@/components/dashboard/CountryMap";
 import CountryRankingTable from "@/components/dashboard/CountryRankingTable";
 import SDGScoreGrid from "@/components/dashboard/SDGScoreGrid";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fetchSDGScores } from "@/services/sdgScoresApi";
-
-// ── Shared type — imported from countryTypes ──
 import type { LiveCountryRecord } from "@/types/countryTypes";
 
-// ─── ENV ─────────────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
 
-// ─── TYPES ────────────────────────────────────────────────────────────────────
-export type ClusterName =
+type ClusterName =
   | "Nordic Leaders"
   | "Western Innovators"
   | "Mediterranean Transitioning"
@@ -36,17 +34,43 @@ export type ClusterName =
 
 interface ApiHealthResponse {
   status?: string;
-  version?: string;
-  name?: string;
-  models?: Record<string, unknown>;
+  database?: string;
+  countries_loaded?: number;
+  metrics_loaded?: number;
+  date_range?: string;
+  timestamp?: string;
 }
 
-// ─── CLUSTER META ────────────────────────────────────────────────────────────
+interface ApiCountry {
+  iso2: string;
+  name: string;
+  region: string;
+  is_eu27: boolean;
+  latitude: number;
+  longitude: number;
+}
+
+interface ApiSdgScoreRow {
+  country_iso2: string;
+  country_name: string;
+  sdg_id: number;
+  sdg_title: string;
+  year: number;
+  normalised_score: number;
+  data_type: string;
+}
+
+const EU27_CODES = new Set([
+  "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+  "DE", "EL", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+  "PL", "PT", "RO", "SK", "SI", "ES", "SE",
+]);
+
 const CLUSTER_COLORS: Record<ClusterName, string> = {
   "Nordic Leaders": "#15803d",
   "Western Innovators": "#2563eb",
   "Mediterranean Transitioning": "#d97706",
-  "Central European Rising": "#c2410c",
+  "Central European Rising": "#7c3aed",
   "Eastern Emerging": "#dc2626",
 };
 
@@ -58,75 +82,74 @@ const CLUSTER_ORDER: ClusterName[] = [
   "Eastern Emerging",
 ];
 
-// ─── HELPERS ──────────────────────────────────────────────────────────────────
-function scoreColor(s: number): string {
-  if (s >= 80) return "#15803d";
-  if (s >= 70) return "#2563eb";
-  if (s >= 58) return "#d97706";
+function scoreColor(score: number): string {
+  if (score >= 80) return "#15803d";
+  if (score >= 70) return "#2563eb";
+  if (score >= 55) return "#d97706";
+  if (score >= 50) return "#7c3aed";
   return "#dc2626";
 }
 
-// ─── LIVE API HOOKS ───────────────────────────────────────────────────────────
-function useAllCountries() {
-  return useQuery<LiveCountryRecord[]>({
-    queryKey: ["all-countries"],
-    staleTime: 1000 * 60 * 10,
-    retry: 1,
-    queryFn: async () => {
-      const [countriesRes, csiRes] = await Promise.all([
-        fetch(`${API_BASE}/api/countries`),
-        fetch(`${API_BASE}/api/csi-scores/latest`)
-      ]);
+function getCluster(score: number): ClusterName {
+  if (score >= 80) return "Nordic Leaders";
+  if (score >= 68) return "Western Innovators";
+  if (score >= 55) return "Mediterranean Transitioning";
+  if (score >= 50) return "Central European Rising";
+  return "Eastern Emerging";
+}
 
-      if (!countriesRes.ok || !csiRes.ok) {
-        throw new Error("Failed to load country data from database");
-      }
+function isEu27MockCountry(country: any): boolean {
+  const code = country?.countryCode?.toUpperCase?.();
+  if (!code) return false;
 
-      const countriesList = await countriesRes.json();
-      const csiList = await csiRes.json();
+  if (typeof country?.is_eu27 === "boolean") return country.is_eu27;
+  if (typeof country?.isEU === "boolean") return country.isEU;
+  if (typeof country?.isEu27 === "boolean") return country.isEu27;
 
-      const countriesMap = new Map<string, any>();
-      countriesList.forEach((c: any) => {
-        countriesMap.set(c.iso2.toUpperCase(), c);
-      });
+  return EU27_CODES.has(code);
+}
 
-      const csiMap = new Map<string, any>();
-      csiList.forEach((c: any) => {
-        csiMap.set(c.country_iso2?.toUpperCase?.() ?? c.countryiso2?.toUpperCase?.(), c);
-      });
+function average(values: number[]): number {
+  if (!values.length) return 0;
+  return values.reduce((sum, val) => sum + val, 0) / values.length;
+}
 
-      const staticSorted = [...COUNTRY_SDG_SCORES].sort((a, b) => b.csi - a.csi);
+function buildFallbackCountries(selectedYear: number): LiveCountryRecord[] {
+  const eu27Rows = COUNTRY_SDG_SCORES.filter(isEu27MockCountry);
+  const sorted = [...eu27Rows]
+    .map((country) => {
+      const values = Object.values(country.sdgScores ?? {}).filter(
+        (v): v is number => typeof v === "number"
+      );
+      const csi = values.length > 0 ? average(values) : country.csi;
 
-      const matchedRecords: LiveCountryRecord[] = COUNTRY_SDG_SCORES.map((staticCountry) => {
-        const code = staticCountry.countryCode.toUpperCase();
-        const dbCountry = countriesMap.get(code);
-        const dbCsi = csiMap.get(code);
+      return {
+        country: country.country,
+        countryCode: country.countryCode ?? "",
+        lat: country.lat ?? 0,
+        lon: country.lon ?? 0,
+        population: 0,
+        csi,
+        rank: 0,
+        percentile: 0,
+        cluster: getCluster(csi),
+        sdgAchievementRate:
+          values.length > 0
+            ? Math.round((values.filter((v) => v >= 70).length / values.length) * 100)
+            : 0,
+        sdgScores: (country.sdgScores ?? {}) as Record<number, number | null>,
+        year: selectedYear,
+        metrics: {} as LiveCountryRecord["metrics"],
+      } as LiveCountryRecord;
+    })
+    .sort((a, b) => b.csi - a.csi)
+    .map((country, index, arr) => ({
+      ...country,
+      rank: index + 1,
+      percentile: Math.round(((arr.length - index) / arr.length) * 100),
+    }));
 
-        const fallbackRank =
-          staticSorted.findIndex((c) => c.countryCode?.toUpperCase() === code) + 1 || 0;
-
-        return {
-          ...staticCountry,
-          csi: dbCsi ? (dbCsi.csi_score ?? dbCsi.csiscore ?? staticCountry.csi) : staticCountry.csi,
-          cluster: (dbCsi ? (dbCsi.cluster ?? staticCountry.cluster) : staticCountry.cluster) as any,
-          rank: dbCsi ? (dbCsi.eu_rank ?? dbCsi.eurank ?? fallbackRank) : fallbackRank,
-          percentile: dbCsi
-            ? (dbCsi.eu_percentile ?? dbCsi.eupercentile ?? staticCountry.percentile)
-            : staticCountry.percentile,
-          lat: dbCountry ? parseFloat(dbCountry.latitude) || staticCountry.lat : staticCountry.lat,
-          lon: dbCountry ? parseFloat(dbCountry.longitude) || staticCountry.lon : staticCountry.lon,
-          year: 2024,
-          metrics: {},
-        } as LiveCountryRecord;
-      });
-
-      return matchedRecords.sort((a, b) => b.csi - a.csi).map((r, i) => ({
-        ...r,
-        rank: i + 1,
-        percentile: Math.round(((matchedRecords.length - i) / matchedRecords.length) * 100)
-      }));
-    },
-  });
+  return sorted;
 }
 
 function useApiHealth() {
@@ -135,14 +158,139 @@ function useApiHealth() {
     staleTime: 1000 * 60 * 5,
     retry: 1,
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/`);
+      const res = await fetch(`${API_BASE}/health`);
       if (!res.ok) throw new Error("offline");
       return res.json();
     },
   });
 }
 
-function useCountryOverview(countryName: string | null) {
+function useEu27Countries() {
+  return useQuery<ApiCountry[]>({
+    queryKey: ["eu27-countries"],
+    staleTime: 1000 * 60 * 30,
+    retry: 1,
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/countries`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch countries");
+      }
+
+      const allCountries: ApiCountry[] = await res.json();
+      return allCountries.filter((c) => c.is_eu27 === true);
+    },
+  });
+}
+
+function useAllCountries(selectedYear: number) {
+  const countriesQuery = useEu27Countries();
+
+  const sdgQueries = useQueries({
+    queries: (countriesQuery.data ?? []).map((country) => ({
+      queryKey: ["country-sdg-scores", country.iso2, selectedYear],
+      queryFn: async (): Promise<ApiSdgScoreRow[]> => {
+        const res = await fetch(
+          `${API_BASE}/api/sdg-scores/country/${country.iso2}/year/${selectedYear}`
+        );
+
+        if (!res.ok) {
+          if (res.status === 404) return [];
+          throw new Error(`Failed SDG fetch for ${country.iso2}`);
+        }
+
+        return res.json();
+      },
+      enabled: !!countriesQuery.data?.length,
+      staleTime: 1000 * 60 * 15,
+      retry: 1,
+    })),
+  });
+
+  const data = useMemo<LiveCountryRecord[]>(() => {
+    const countries = countriesQuery.data ?? [];
+    if (!countries.length) return [];
+
+    const fallbackMap = new Map(
+      COUNTRY_SDG_SCORES
+        .filter(isEu27MockCountry)
+        .map((c) => [c.countryCode?.toUpperCase(), c] as const)
+    );
+
+    const rows: LiveCountryRecord[] = countries.map((country, index) => {
+      const query = sdgQueries[index];
+      const sdgRows = query?.data ?? [];
+      const fallback = fallbackMap.get(country.iso2.toUpperCase());
+
+      const sdgScores: Record<number, number | null> = {};
+
+      SDG_DEFINITIONS.forEach((sdg) => {
+        const match = sdgRows.find((row) => row.sdg_id === sdg.id);
+        sdgScores[sdg.id] =
+          typeof match?.normalised_score === "number"
+            ? match.normalised_score
+            : (fallback?.sdgScores?.[sdg.id] ?? null);
+      });
+
+      const validScores = Object.values(sdgScores).filter(
+        (v): v is number => typeof v === "number"
+      );
+
+      const csi =
+        validScores.length > 0
+          ? average(validScores)
+          : fallback?.csi ?? 0;
+
+      const sdgAchievementRate =
+        validScores.length > 0
+          ? Math.round((validScores.filter((v) => v >= 70).length / validScores.length) * 100)
+          : fallback?.sdgAchievementRate ?? 0;
+
+      return {
+        country: country.name,
+        countryCode: country.iso2.toUpperCase(),
+        lat: country.latitude,
+        lon: country.longitude,
+        population: 0,
+        csi: Number(csi.toFixed(2)),
+        rank: 0,
+        percentile: 0,
+        cluster: getCluster(csi),
+        sdgAchievementRate,
+        sdgScores,
+        year: selectedYear,
+        metrics: {} as LiveCountryRecord["metrics"],
+      };
+    });
+
+    return rows
+      .sort((a, b) => b.csi - a.csi)
+      .map((row, index, arr) => ({
+        ...row,
+        rank: index + 1,
+        percentile: Math.round(((arr.length - index) / arr.length) * 100),
+      }));
+  }, [countriesQuery.data, sdgQueries, selectedYear]);
+
+  const isLoading =
+    countriesQuery.isLoading ||
+    (countriesQuery.data?.length
+      ? sdgQueries.some((q) => q.isLoading)
+      : false);
+
+  const isError =
+    countriesQuery.isError ||
+    sdgQueries.some((q) => q.isError);
+
+  return {
+    data: data.length > 0 ? data : isError ? buildFallbackCountries(selectedYear) : [],
+    isLoading,
+    isError,
+  };
+}
+
+function useCountryOverview(countryName: string | null, selectedYear: number) {
+  const countriesQuery = useEu27Countries();
+
   return useQuery<{
     country: string;
     csi: number | null;
@@ -153,97 +301,78 @@ function useCountryOverview(countryName: string | null) {
     liveSDGIds: Set<number>;
     timestamp: string;
   }>({
-    queryKey: ["country-overview", countryName],
-    enabled: !!countryName,
+    queryKey: ["country-overview-sdg-only", countryName, selectedYear],
+    enabled: !!countryName && !!countriesQuery.data?.length,
     staleTime: 1000 * 60 * 10,
     retry: 1,
     queryFn: async () => {
-      const data = await fetchSDGScores(countryName!);
+      const country = countriesQuery.data!.find(
+        (c) => c.name.toLowerCase() === countryName!.toLowerCase()
+      );
 
-      const mappedScores: Record<number, number | null> = {};
+      if (!country) {
+        throw new Error(`Country not found in EU-27 list: ${countryName}`);
+      }
+
+      const res = await fetch(
+        `${API_BASE}/api/sdg-scores/country/${country.iso2}/year/${selectedYear}`
+      );
+
+      if (!res.ok) {
+        throw new Error(`Failed to fetch SDG scores for ${country.iso2}`);
+      }
+
+      const sdgRows: ApiSdgScoreRow[] = await res.json();
+      const sdgScores: Record<number, number | null> = {};
       const liveSDGIds = new Set<number>();
 
-      Object.entries(data.sdgScores ?? {}).forEach(([_, val]: [string, any]) => {
-        mappedScores[val.id] = val.score;
-        if (val.score !== null) liveSDGIds.add(val.id);
+      SDG_DEFINITIONS.forEach((sdg) => {
+        const match = sdgRows.find((row) => row.sdg_id === sdg.id);
+        if (match && typeof match.normalised_score === "number") {
+          sdgScores[sdg.id] = match.normalised_score;
+          liveSDGIds.add(sdg.id);
+        } else {
+          sdgScores[sdg.id] = null;
+        }
       });
 
-      const nonNullScores = Object.values(mappedScores).filter(s => s !== null) as number[];
-      const over70Count = nonNullScores.filter(s => s >= 70).length;
-      const sdgAchievementRate = nonNullScores.length > 0
-        ? Math.round((over70Count / nonNullScores.length) * 100)
-        : 0;
-
-      const mockCountry = COUNTRY_SDG_SCORES.find(
-        c => c.country.toLowerCase() === countryName!.toLowerCase()
+      const values = Object.values(sdgScores).filter(
+        (v): v is number => typeof v === "number"
       );
-      const cluster = (mockCountry?.cluster ?? null) as ClusterName | null;
+
+      const csi = values.length > 0 ? average(values) : null;
+      const sdgAchievementRate =
+        values.length > 0
+          ? Math.round((values.filter((v) => v >= 70).length / values.length) * 100)
+          : 0;
 
       return {
-        country: data.country,
-        csi: data.csi ?? null,
+        country: country.name,
+        csi: csi !== null ? Number(csi.toFixed(2)) : null,
         percentile: null,
         sdgAchievementRate,
-        cluster,
-        sdgScores: mappedScores,
+        cluster: csi !== null ? getCluster(csi) : null,
+        sdgScores,
         liveSDGIds,
-        timestamp: data.timestamp,
+        timestamp: new Date().toISOString(),
       };
     },
   });
 }
 
-// ─── DERIVED KPI HOOK ─────────────────────────────────────────────────────────
-function useDashboardKpis(liveCountries: LiveCountryRecord[] | undefined) {
+function useDashboardKpis(liveCountries: LiveCountryRecord[] | undefined, selectedYear: number) {
   return useMemo(() => {
-    if (liveCountries && liveCountries.length > 0) {
-      const total = liveCountries.length;
-      const avgCsi = (
-        liveCountries.reduce((s, c) => s + c.csi, 0) / total
-      ).toFixed(1);
-      const topCountry = liveCountries[0];
-      const bottomCountry = liveCountries[total - 1];
-      const above70 = liveCountries.filter((c) => c.csi >= 70).length;
+    const rows =
+      liveCountries && liveCountries.length > 0
+        ? liveCountries
+        : buildFallbackCountries(selectedYear);
 
-      const clusterMap: Record<string, { count: number; totalCsi: number }> = {};
-      for (const c of liveCountries) {
-        if (!clusterMap[c.cluster]) clusterMap[c.cluster] = { count: 0, totalCsi: 0 };
-        clusterMap[c.cluster].count++;
-        clusterMap[c.cluster].totalCsi += c.csi;
-      }
-
-      const clusters = CLUSTER_ORDER.map((name) => ({
-        name,
-        count: clusterMap[name]?.count ?? 0,
-        avgCsi: clusterMap[name]
-          ? parseFloat((clusterMap[name].totalCsi / clusterMap[name].count).toFixed(1))
-          : 0,
-        color: CLUSTER_COLORS[name],
-      }));
-
-      return { avgCsi, topCountry, bottomCountry, above70, clusters, isLive: true, total };
-    }
-
-    const fallback = COUNTRY_SDG_SCORES;
-    const sorted = [...fallback].sort((a, b) => b.csi - a.csi);
-    const total = sorted.length;
-    const avgCsi = (sorted.reduce((s, c) => s + c.csi, 0) / total).toFixed(1);
-
-    const toRecord = (c: typeof sorted[0], i: number): LiveCountryRecord => ({
-      country: c.country,
-      countryCode: c.countryCode ?? "",
-      lat: c.lat ?? 0,
-      lon: c.lon ?? 0,
-      population: 0,
-      csi: c.csi,
-      rank: i + 1,
-      percentile: c.percentile ?? 0,
-      cluster: c.cluster as ClusterName,
-      sdgAchievementRate: c.sdgAchievementRate ?? 0,
-      sdgScores: c.sdgScores as Record<number, number | null>,
-      year: 2024,
-      metrics: {},
-    });
+    const total = rows.length;
+    const sorted = [...rows].sort((a, b) => b.csi - a.csi);
+    const avgCsi = total > 0 ? (sorted.reduce((s, c) => s + c.csi, 0) / total).toFixed(1) : "0.0";
+    const topCountry = sorted[0];
+    const bottomCountry = sorted[total - 1];
+    const above60 = sorted.filter((c) => c.csi >= 60).length;
 
     const clusterMap: Record<string, { count: number; totalCsi: number }> = {};
     for (const c of sorted) {
@@ -263,36 +392,37 @@ function useDashboardKpis(liveCountries: LiveCountryRecord[] | undefined) {
 
     return {
       avgCsi,
-      topCountry: toRecord(sorted[0], 0),
-      bottomCountry: toRecord(sorted[total - 1], total - 1),
-      above70: sorted.filter((c) => c.csi >= 70).length,
+      topCountry,
+      bottomCountry,
+      above60,
       clusters,
-      isLive: false,
+      isLive: !!liveCountries?.length,
       total,
     };
-  }, [liveCountries]);
+  }, [liveCountries, selectedYear]);
 }
 
-// ─── COUNTRY DETAIL PANEL ───────────────────────────────────────────────────────
 function CountryDetailPanel({
   countryName,
   liveRecord,
+  selectedYear,
   onClose,
 }: {
   countryName: string;
   liveRecord?: LiveCountryRecord;
+  selectedYear: number;
   onClose: () => void;
 }) {
-  const { data: overview, isLoading, error } = useCountryOverview(countryName);
+  const { data: overview, isLoading, error } = useCountryOverview(countryName, selectedYear);
   const staticData = COUNTRY_SDG_SCORES.find((c) => c.country === countryName);
 
-  const rawCsi = liveRecord?.csi ?? overview?.csi ?? staticData?.csi ?? null;
+  const rawCsi = overview?.csi ?? liveRecord?.csi ?? staticData?.csi ?? null;
   const displayCsiStr = rawCsi !== null ? rawCsi.toFixed(1) : "N/A";
 
-  const rawPercentile = liveRecord?.percentile ?? overview?.percentile ?? staticData?.percentile ?? null;
+  const rawPercentile = liveRecord?.percentile ?? null;
   const displayPercentileStr = rawPercentile !== null ? `P${Math.round(rawPercentile)}` : "N/A";
 
-  const displayCluster = liveRecord?.cluster ?? overview?.cluster ?? staticData?.cluster ?? "";
+  const displayCluster = overview?.cluster ?? liveRecord?.cluster ?? staticData?.cluster ?? "";
   const displayAchRate = overview?.sdgAchievementRate ?? liveRecord?.sdgAchievementRate ?? 0;
 
   const sdgScores = overview?.sdgScores ?? staticData?.sdgScores ?? {};
@@ -318,11 +448,10 @@ function CountryDetailPanel({
       <div className="grid grid-cols-3 gap-2">
         <div className="bg-blue-50 rounded-lg p-3 text-center">
           <p className="text-2xl font-black font-display text-blue-700">
-            {isLoading && !liveRecord ? "…" : displayCsiStr}
+            {isLoading ? "…" : displayCsiStr}
           </p>
           <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wide mt-0.5">
             CSI
-            {liveRecord && <span className="ml-1 text-green-500">●</span>}
           </p>
         </div>
 
@@ -360,7 +489,7 @@ function CountryDetailPanel({
 
         {error && (
           <div className="text-xs text-slate-500 p-2 bg-amber-50 rounded border border-amber-200 mb-2">
-            ⚠️ Live SDG data unavailable — CSI from global ranking
+            ⚠️ Live SDG data unavailable
           </div>
         )}
 
@@ -382,16 +511,21 @@ function CountryDetailPanel({
                 >
                   {sdg.id}
                 </span>
+
                 <span className="text-[11px] text-slate-500 truncate flex-1 group-hover:text-slate-800 transition-colors">
                   {sdg.shortTitle}
                 </span>
+
                 {!hasScore ? (
                   <span className="text-[10px] text-slate-300 italic shrink-0">N/A</span>
                 ) : (
                   <div className="flex items-center gap-1.5 shrink-0">
                     <div
-                      className={`w-1 h-1 rounded-full ${isLiveScore ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]" : "bg-amber-400"}`}
-                      title={isLiveScore ? "Live DB value" : "Calculated from metrics"}
+                      className={`w-1 h-1 rounded-full ${
+                        isLiveScore
+                          ? "bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.6)]"
+                          : "bg-amber-400"
+                      }`}
                     />
                     <div className="w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                       <div
@@ -414,7 +548,7 @@ function CountryDetailPanel({
 
         {overview && (
           <p className="text-[9px] text-slate-300 mt-2">
-            Live · Updated {new Date(overview.timestamp).toLocaleDateString()}
+            SDG-derived CSI · Updated {new Date(overview.timestamp).toLocaleDateString()}
           </p>
         )}
       </div>
@@ -440,6 +574,7 @@ function ClusterBreakdown({
           <span className="ml-auto text-[9px] text-green-500 font-bold">● LIVE</span>
         )}
       </div>
+
       <div className="space-y-2.5">
         {clusters.map((cl) => (
           <div key={cl.name}>
@@ -455,6 +590,7 @@ function ClusterBreakdown({
                 </span>
               </div>
             </div>
+
             <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-700"
@@ -479,14 +615,16 @@ function KpiSkeleton() {
   );
 }
 
-// ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 export default function Index() {
   const [selectedCountry, setSelectedCountry] = useState<string | undefined>();
   const [view, setView] = useState<"map" | "list">("map");
+  const [selectedYear, setSelectedYear] = useState<number>(2025);
 
-  const { data: liveCountries, isLoading: countriesLoading, error: countriesError } = useAllCountries();
+  const { data: liveCountries, isLoading: countriesLoading, isError: countriesError } =
+    useAllCountries(selectedYear);
+
   const health = useApiHealth();
-  const kpis = useDashboardKpis(liveCountries);
+  const kpis = useDashboardKpis(liveCountries, selectedYear);
 
   const selectedLiveRecord = selectedCountry
     ? liveCountries?.find((c) => c.country === selectedCountry)
@@ -496,37 +634,45 @@ export default function Index() {
     {
       label: "Avg CSI Score",
       value: countriesLoading ? "—" : kpis.avgCsi,
-      sub: countriesLoading ? "Loading…" : `${kpis.total} European countries tracked`,
+      sub: countriesLoading ? "Loading…" : `${kpis.total} EU-27 countries tracked`,
       icon: <BarChart3 className="w-5 h-5" />,
-      bg: "bg-blue-50", text: "text-blue-600",
+      bg: "bg-blue-50",
+      text: "text-blue-600",
       isLive: kpis.isLive,
     },
     {
       label: "Top Ranked Country",
-      value: countriesLoading ? "—" : kpis.topCountry.country,
+      value: countriesLoading ? "—" : (kpis.topCountry?.country ?? "—"),
       sub: countriesLoading
         ? "Loading…"
-        : `#1 · CSI ${kpis.topCountry.csi.toFixed(1)} · ${kpis.topCountry.cluster}`,
+        : kpis.topCountry
+        ? `#1 · CSI ${kpis.topCountry.csi.toFixed(1)} · ${kpis.topCountry.cluster}`
+        : "No data",
       icon: <Award className="w-5 h-5" />,
-      bg: "bg-green-50", text: "text-green-600",
+      bg: "bg-green-50",
+      text: "text-green-600",
       isLive: kpis.isLive,
     },
     {
-      label: "Above CSI 70",
-      value: countriesLoading ? "—" : `${kpis.above70} / ${kpis.total}`,
-      sub: "Strong performers — SDG on-track",
-      icon: <TrendingUp className="w-5 h-5" />,
-      bg: "bg-indigo-50", text: "text-indigo-600",
-      isLive: kpis.isLive,
-    },
+  label: "Above CSI 60",
+  value: countriesLoading ? "—" : `${kpis.above60} / ${kpis.total}`,
+  sub: "Based on SDG-derived CSI",
+  icon: <TrendingUp className="w-5 h-5" />,
+  bg: "bg-indigo-50",
+  text: "text-indigo-600",
+  isLive: kpis.isLive,
+},
     {
       label: "Needs Most Focus",
-      value: countriesLoading ? "—" : kpis.bottomCountry.country,
+      value: countriesLoading ? "—" : (kpis.bottomCountry?.country ?? "—"),
       sub: countriesLoading
         ? "Loading…"
-        : `#${kpis.total} · CSI ${kpis.bottomCountry.csi.toFixed(1)} · ${kpis.bottomCountry.cluster}`,
+        : kpis.bottomCountry
+        ? `#${kpis.total} · CSI ${kpis.bottomCountry.csi.toFixed(1)} · ${kpis.bottomCountry.cluster}`
+        : "No data",
       icon: <TrendingDown className="w-5 h-5" />,
-      bg: "bg-amber-50", text: "text-amber-600",
+      bg: "bg-amber-50",
+      text: "text-amber-600",
       isLive: kpis.isLive,
     },
   ];
@@ -536,14 +682,29 @@ export default function Index() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold font-display text-slate-800">
-            EU Country Sustainability Dashboard
+            EU-27 Sustainability Dashboard
           </h1>
           <p className="text-sm text-slate-500 mt-1">
-            Composite Sustainability Index (CSI) · 12 SDGs · {kpis.total} countries · Eurostat open data 2015–2024
+            CSI calculated from SDG score APIs only · EU-27 countries · 12-goal average for selected year
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-start mt-1 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1">
+            <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Year:</span>
+            <select
+              className="text-xs font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+            >
+              {[2023, 2024, 2025].map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {health.isLoading ? (
             <span className="text-xs text-slate-400 flex items-center gap-1">
               <RefreshCw className="w-3 h-3 animate-spin" /> Connecting…
@@ -551,25 +712,26 @@ export default function Index() {
           ) : health.data ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-full px-2.5 py-1">
               <Wifi className="w-3 h-3" />
-              FastAPI v{health.data.version} · {Object.keys(health.data.models ?? {}).length} models loaded
+              FastAPI connected
             </span>
           ) : (
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-full px-2.5 py-1">
               <WifiOff className="w-3 h-3" />
-              API offline · local fallback active
+              API offline
             </span>
           )}
 
           {countriesError && (
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
               <Database className="w-3 h-3" />
-              Rankings: local cache
+              Static fallback active
             </span>
           )}
-          {kpis.isLive && (
+
+          {!countriesError && (
             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded-full px-2.5 py-1">
               <Database className="w-3 h-3" />
-              Rankings: live · {kpis.total} countries
+              SDG API source · EU-27 only
             </span>
           )}
         </div>
@@ -587,17 +749,19 @@ export default function Index() {
               {k.isLive ? (
                 <span
                   className="absolute top-3 right-3 w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.6)]"
-                  title="Live data from backend"
+                  title="Live data from SDG backend"
                 />
               ) : (
                 <span
                   className="absolute top-3 right-3 w-2 h-2 rounded-full bg-red-400"
-                  title="Mock / Fallback data"
+                  title="Fallback data"
                 />
               )}
+
               <div className={`w-9 h-9 rounded-lg ${k.bg} ${k.text} flex items-center justify-center mb-3`}>
                 {k.icon}
               </div>
+
               <p className="text-xl font-black font-display text-slate-800 leading-none truncate">
                 {k.value}
               </p>
@@ -613,8 +777,9 @@ export default function Index() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-display font-semibold text-slate-800">
-            Country Map &amp; Rankings
+            Country Map & Rankings
           </h2>
+
           <div className="flex border border-slate-200 rounded-lg overflow-hidden bg-white">
             {(["map", "list"] as const).map((v) => (
               <button
@@ -648,29 +813,29 @@ export default function Index() {
                 <CountryDetailPanel
                   countryName={selectedCountry}
                   liveRecord={selectedLiveRecord}
+                  selectedYear={selectedYear}
                   onClose={() => setSelectedCountry(undefined)}
                 />
               ) : (
                 <div className="bg-white border border-slate-200 border-dashed rounded-xl p-6 text-center">
                   <MapPin className="w-8 h-8 mx-auto mb-2 text-slate-200" />
                   <p className="text-sm font-semibold text-slate-400">
-                    Click a country dot
+                    Click an EU-27 country
                   </p>
                   <p className="text-xs text-slate-300 mt-1">
-                    to see its full 12-SDG breakdown
+                    to see its SDG-derived CSI and 12-goal breakdown
                   </p>
                 </div>
               )}
 
               {countriesLoading ? (
                 <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
-                  {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-6 w-full" />)}
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-6 w-full" />
+                  ))}
                 </div>
               ) : (
-                <ClusterBreakdown
-                  clusters={kpis.clusters}
-                  isLive={kpis.isLive}
-                />
+                <ClusterBreakdown clusters={kpis.clusters} isLive={kpis.isLive} />
               )}
             </div>
           </div>
@@ -691,22 +856,25 @@ export default function Index() {
               SDG Score Heatmap
             </h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Top 8 countries × 12 SDGs · Click any SDG header to explore
+              EU-27 only · CSI and grid both derived from SDG score APIs
             </p>
           </div>
-          {!kpis.isLive && (
+
+          {countriesError && (
             <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 rounded-full px-2 py-0.5 font-semibold">
-              Static fallback — live heatmap loads when API connects
+              Static fallback active
             </span>
           )}
         </div>
-        <SDGScoreGrid liveCountries={liveCountries ?? []} />
+
+        <SDGScoreGrid liveCountries={liveCountries ?? []} selectedYear={selectedYear} />
       </div>
 
       <div>
         <h2 className="font-display font-semibold text-slate-800 mb-3">
           Explore by SDG
         </h2>
+
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3">
           {SDG_DEFINITIONS.map((sdg) => (
             <Link
@@ -720,9 +888,11 @@ export default function Index() {
               >
                 {sdg.id}
               </div>
+
               <p className="text-xs font-semibold text-slate-700 group-hover:text-blue-700 transition-colors leading-tight">
                 {sdg.shortTitle}
               </p>
+
               <span
                 className={`mt-1.5 inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                   sdg.type === "direct"

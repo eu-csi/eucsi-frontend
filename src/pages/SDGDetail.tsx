@@ -17,24 +17,22 @@ import {
   Target,
   RefreshCw,
 } from "lucide-react";
+import { SDG_DEFINITIONS } from "@/data/sdgData";
 import {
-  SDG_DEFINITIONS,
-  COUNTRY_SDG_SCORES,
-  getTopCountriesForSdg,
-  generateSdgTrendData,
-} from "@/data/sdgData";
-import {
-  generateForecastData,
-  detectAnomalies,
-  getBenchmarks,
-  SDG_FORECAST_LABELS,
-} from "@/data/analyticsData";
-import {
-  useSDGScores,
   fetchIndicatorData,
   fetchCountriesList,
+  fetchSDGScoresBySDGYear,
+  fetchCountrySdgScores,
+  fetchMetricBenchmarkByCountryYear,
+  getDbMetricName,
+  getScoreColor,
+  type Country,
+  type IndicatorSeries,
+  type SDGScore,
+  type FetchCountrySdgScoresResponse,
+  type MetricBenchmarkCountryValue,
 } from "@/services/sdgScoresApi";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import {
   AreaChart,
   Area,
@@ -53,131 +51,117 @@ import {
   LabelList,
 } from "recharts";
 
-type Country = {
-  country_id: number;
-  name?: string;
-  country?: string;
-  country_name?: string;
-  iso2?: string;
-  iso3?: string;
+const API_BASE = import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://187.127.164.121:8002";
+const LIVE_SDG_IDS: number[] = [3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17];
+const TABS = ["Overview", "Forecast", "Benchmarks", "Anomalies", "Country Rankings", "Metric Guide"] as const;
+type Tab = typeof TABS[number];
+
+const TAB_ICONS = {
+  Overview: BarChart2,
+  Forecast: Zap,
+  Benchmarks: Target,
+  Anomalies: AlertTriangle,
+  "Country Rankings": Table2,
+  "Metric Guide": BookOpen,
 };
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
-const LIVE_SDG_IDS: number[] = [3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17];
+type MetricValueView = {
+  value: string | number;
+  trend?: number;
+  benchmark?: number | null;
+  category?: string;
+};
 
-function scoreColor(s: number) {
+type BenchmarkRow = {
+  metricKey: string;
+  metricLabel: string;
+  unit: string;
+  countryValue: number;
+  eu27Avg: number;
+  topCountry: string;
+  topValue: number;
+  bottomCountry: string;
+  bottomValue: number;
+  performanceGap: number;
+  targetGap: number | null;
+  euTarget?: number | null;
+  whoThreshold?: number | null;
+};
+
+type AnomalyView = {
+  year: number;
+  metric: string;
+  value: number;
+  confidence: number;
+  p_low: number | null;
+  p_high: number | null;
+  label: string;
+  description: string;
+  severity: "critical" | "warning";
+  deviation: number;
+  expected: string;
+};
+
+type ForecastPoint = {
+  year: number;
+  actual?: number;
+  projected?: number;
+  upper?: number;
+  lower?: number;
+  isProjected?: boolean;
+};
+
+type TrendPoint = {
+  year: number;
+  value: number;
+  eu27: number | null;
+};
+
+type RankingPoint = {
+  rank: number;
+  country_name: string;
+  country_iso2: string;
+  score: number;
+};
+
+function scoreHex(s: number) {
   if (s >= 78) return "#15803d";
   if (s >= 65) return "#2563eb";
   if (s >= 55) return "#d97706";
   return "#dc2626";
 }
 
-function formatDisplayValue(rawValue: any, unit: string): string {
-  if (rawValue === undefined || rawValue === null) return "—";
+function formatDisplayValue(rawValue: unknown, unit: string): string {
+  if (rawValue === undefined || rawValue === null || rawValue === "") return "—";
   if (typeof rawValue === "string" && rawValue !== "") return rawValue;
 
   const num = Number(rawValue);
-  if (isNaN(num)) return String(rawValue);
+  if (Number.isNaN(num)) return String(rawValue);
 
   if (unit.includes("EUR") && num > 9999) return Math.round(num).toLocaleString("en-US");
-  if (Number.isInteger(num) || num >= 100) return Math.round(num).toString();
-  if (num >= 10) return num.toFixed(1);
+  if (Number.isInteger(num) || Math.abs(num) >= 100) return Math.round(num).toString();
+  if (Math.abs(num) >= 10) return num.toFixed(1);
   return num.toFixed(2);
 }
 
-function getMockMetricValues(
-  sdgId: number,
-  country: string
-): Record<string, { value: string | number; trend?: number; benchmark?: number; category?: string }> {
-  const countryData = COUNTRY_SDG_SCORES.find((c) => c.country === country);
-  const score = countryData?.sdgScores?.[sdgId] ?? 65;
-  const m = score / 100;
+function average(nums: number[]) {
+  if (!nums.length) return null;
+  return Number((nums.reduce((a, b) => a + b, 0) / nums.length).toFixed(2));
+}
 
-  const maps: Record<number, Record<string, any>> = {
-    5: {
-      genderEmploymentGap: { value: (22 - m * 18).toFixed(1), trend: -0.4, benchmark: 10.1 },
-      femaleEmploymentRate: { value: (45 + m * 40).toFixed(1), trend: 1.2, benchmark: 68.4 },
-      genderGapTrend: { value: (-0.9 + m * 0.8).toFixed(2), trend: 0.1, benchmark: -0.2 },
-    },
-    6: {
-      weiPlus: { value: (40 - m * 35).toFixed(1), trend: -1.1, benchmark: 18.4 },
-      waterPerCapita: { value: Math.round(220 - m * 110), trend: -2.3, benchmark: 155 },
-      waterStressCategory: {
-        value: "",
-        category: m > 0.8 ? "No Stress" : m > 0.65 ? "Low" : m > 0.5 ? "Stress" : "Severe",
-      },
-      waterAbstractionTrend: { value: (-0.5 - m * 0.8).toFixed(2), trend: -0.2, benchmark: -0.3 },
-    },
-    7: {
-      renewableShare: { value: (10 + m * 55).toFixed(1), trend: 5.8, benchmark: 22.1 },
-      energyIntensity: { value: (8 - m * 5).toFixed(2), trend: -0.4, benchmark: 5.2 },
-      aimForecast: { value: Math.round(800 + m * 2200), trend: 3.1, benchmark: 1450 },
-      distributionLosses: { value: Math.round(200 - m * 130), trend: -3.1, benchmark: 120 },
-      energyCategoryLabel: {
-        value: "",
-        category: m > 0.75 ? "High" : m > 0.55 ? "Med" : "Low",
-      },
-    },
-    8: {
-      gdpPerCapita: {
-        value: Math.round(18000 + m * 112000).toLocaleString(),
-        trend: 2.1,
-        benchmark: 31200,
-      },
-      employmentRate: { value: (55 + m * 30).toFixed(1), trend: 1.4, benchmark: 72.1 },
-      carbonIntensity: { value: Math.round(400 - m * 260), trend: -4.2, benchmark: 240 },
-      gdpGrowthTrend: { value: (0.5 + m * 3).toFixed(1), trend: 0.3, benchmark: 1.8 },
-    },
-    11: {
-      aqiPm25: { value: (35 - m * 28).toFixed(1), trend: -2.1, benchmark: 18.3 },
-      greenSpacePerCapita: { value: (4 + m * 25).toFixed(1), trend: 0.8, benchmark: 14.2 },
-      greenInfraShare: { value: (15 + m * 35).toFixed(1), trend: 1.2, benchmark: 28.4 },
-      populationDensity: { value: Math.round(1500 + (1 - m) * 5000), trend: 1.8, benchmark: 3200 },
-      publicTransportShare: { value: (25 + m * 50).toFixed(1), trend: 2.3, benchmark: 44.2 },
-      trafficCongestionIndex: { value: (50 - m * 38).toFixed(1), trend: -1.4, benchmark: 32.5 },
-    },
-    12: {
-      recyclingRate: { value: (25 + m * 50).toFixed(1), trend: 3.1, benchmark: 47.8 },
-      wastePerCapita: { value: Math.round(700 - m * 280), trend: -8.2, benchmark: 531 },
-      compostingRate: { value: (5 + m * 25).toFixed(1), trend: 2.2, benchmark: 14.3 },
-      wasteReductionTrend: { value: (-15 + m * 10).toFixed(1), trend: -1.1, benchmark: -4.2 },
-    },
-    13: {
-      ghgPerCapita: { value: (14 - m * 11).toFixed(1), trend: -4.1, benchmark: 7.2 },
-      carbonIntensityEconomy: { value: Math.round(550 - m * 400), trend: -5.2, benchmark: 246 },
-      totalGhgEmissions: { value: (18 - m * 14).toFixed(1), trend: -3.8, benchmark: 12.4 },
-      emissionsReductionTrend: { value: (-6 + m * 6).toFixed(1), trend: 0.4, benchmark: 2.8 },
-    },
-    17: {
-      datasetCoverage: { value: (60 + m * 40).toFixed(1), trend: 2.1, benchmark: 78.4 },
-      dataFreshnessIndex: { value: (3 - m * 2.2).toFixed(1), trend: -0.3, benchmark: 1.8 },
-      openDataCompliance: { value: (70 + m * 30).toFixed(1), trend: 0.0, benchmark: 88.4 },
-      crossSdgCoverage: { value: Math.round(6 + m * 7), trend: 0.0, benchmark: 9.2 },
-    },
-    3: {
-      healthRiskScore: { value: (80 - m * 65).toFixed(1), trend: -3.2, benchmark: 42.1 },
-      airPollutionExposure: { value: (35 - m * 28).toFixed(1), trend: -2.1, benchmark: 18.3 },
-      greenSpaceDeficit: { value: Math.max(0, 9 - (4 + m * 25)).toFixed(1), trend: -0.2, benchmark: 3.8 },
-    },
-    9: {
-      infrastructureModernity: { value: (30 + m * 65).toFixed(1), trend: 2.8, benchmark: 58.3 },
-      energyProductivity: { value: (3 + m * 8).toFixed(1), trend: 0.6, benchmark: 6.2 },
-      transportInfraScore: { value: (25 + m * 65).toFixed(1), trend: 3.1, benchmark: 52.4 },
-    },
-    10: {
-      genderEmploymentGap: { value: (22 - m * 18).toFixed(1), trend: -0.4, benchmark: 10.1 },
-      gdpDisparityIndex: { value: Math.abs(50 - m * 80).toFixed(1), trend: -1.2, benchmark: 18.2 },
-      interCountryInequalityScore: { value: (35 - m * 28).toFixed(1), trend: -0.8, benchmark: 14.2 },
-    },
-    15: {
-      urbanGreenCoverage: { value: (15 + m * 35).toFixed(1), trend: 1.2, benchmark: 28.4 },
-      greenSpacePerCapita: { value: (4 + m * 25).toFixed(1), trend: 0.8, benchmark: 14.2 },
-      greenInfraGap: { value: Math.max(0, 40 - (15 + m * 35)).toFixed(1), trend: -0.6, benchmark: 11.6 },
-      urbanBiodiversityProxy: { value: (25 + m * 65).toFixed(1), trend: 2.1, benchmark: 52.3 },
-    },
-  };
+function yearValue(series?: IndicatorSeries, year?: number, forecast?: boolean) {
+  if (!series?.data?.length || typeof year !== "number") return null;
 
-  return maps[sdgId] ?? {};
+  const exact = series.data.find(
+    (d) => d.year === year && Boolean(d.is_forecast) === Boolean(forecast)
+  );
+  if (exact) return exact.value;
+
+  const filtered = series.data
+    .filter((d) => Boolean(d.is_forecast) === Boolean(forecast))
+    .sort((a, b) => b.year - a.year);
+
+  return filtered[0]?.value ?? null;
 }
 
 const ChartTip = ({ active, payload, label }: any) => {
@@ -206,24 +190,23 @@ function MetricBlock({ metric, vals, color }: any) {
   const [open, setOpen] = useState(false);
   if (!vals) return null;
 
-  const isCategory = metric.type === "category";
+  const isCategory = metric.type === "category" || vals.category;
   const numVal = parseFloat(String(vals.value));
   const target = metric.euTarget ?? metric.whoThreshold;
 
   let status: "good" | "warn" | "bad" | null = null;
-  if (target !== undefined && !isNaN(numVal) && !isCategory) {
+  if (target !== undefined && !Number.isNaN(numVal) && !isCategory) {
     const d = metric.higherIsBetter ? numVal - target : target - numVal;
-    status = d >= 0 ? "good" : d >= -target * 0.2 ? "warn" : "bad";
+    status = d >= 0 ? "good" : d >= -Math.abs(target) * 0.2 ? "warn" : "bad";
   }
 
   const catColors: Record<string, string> = {
     "No Stress": "#15803d",
-    "Low": "#2563eb",
-    "Stress": "#d97706",
-    "Severe": "#dc2626",
-    "High": "#15803d",
-    "Med": "#2563eb",
-    "Low ": "#d97706",
+    Low: "#2563eb",
+    Stress: "#d97706",
+    Severe: "#dc2626",
+    High: "#15803d",
+    Med: "#2563eb",
   };
 
   return (
@@ -256,7 +239,7 @@ function MetricBlock({ metric, vals, color }: any) {
               color: catColors[vals.category] ?? "#64748b",
             }}
           >
-            {vals.category}
+            {vals.category ?? "—"}
           </span>
         </div>
       ) : (
@@ -287,7 +270,6 @@ function MetricBlock({ metric, vals, color }: any) {
                 </span>
               )
             ) : null}
-
             {status && (
               <span
                 className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
@@ -313,7 +295,7 @@ function MetricBlock({ metric, vals, color }: any) {
             <div className="flex justify-between text-[11px]">
               <span className="text-slate-400">EU27 avg</span>
               <span className="font-semibold text-slate-700">
-                {vals.benchmark} {metric.unit}
+                {formatDisplayValue(vals.benchmark, metric.unit)} {metric.unit}
               </span>
             </div>
           )}
@@ -332,24 +314,13 @@ function MetricBlock({ metric, vals, color }: any) {
   );
 }
 
-const TABS = ["Overview", "Forecast", "Benchmarks", "Anomalies", "Country Rankings", "Metric Guide"] as const;
-type Tab = typeof TABS[number];
-
-const TAB_ICONS = {
-  Overview: BarChart2,
-  Forecast: Zap,
-  Benchmarks: Target,
-  Anomalies: AlertTriangle,
-  "Country Rankings": Table2,
-  "Metric Guide": BookOpen,
-};
-
 export default function SDGDetail() {
   const { sdgSlug } = useParams<{ sdgSlug: string }>();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<Tab>("Overview");
   const [country, setCountry] = useState("Sweden");
+  const [selectedYear, setSelectedYear] = useState<number>(2025);
 
   const sdg = SDG_DEFINITIONS.find((s) => s.slug === sdgSlug);
 
@@ -366,167 +337,244 @@ export default function SDGDetail() {
     );
   }
 
-  const { data: liveData } = useSDGScores(country);
-
   const { data: countriesList = [] } = useQuery<Country[]>({
     queryKey: ["countries-list"],
     queryFn: () => fetchCountriesList(),
     staleTime: 1000 * 60 * 60,
   });
 
-  const countryId = useMemo(() => {
-    const match =
-      countriesList.find((c) => c.name === country) ||
-      countriesList.find((c) => c.country === country) ||
-      countriesList.find((c) => c.country_name === country);
+  useEffect(() => {
+    if (!countriesList.length) return;
+    const exists = countriesList.some((c) => c.name === country);
+    if (!exists) setCountry(countriesList[0].name);
+  }, [countriesList, country]);
 
-    return match?.country_id;
+  const countryIso2 = useMemo(() => {
+    const match = countriesList.find((c) => c.name === country);
+    return match?.iso2 ?? null;
   }, [countriesList, country]);
 
   const allSdgs = SDG_DEFINITIONS;
   const idx = allSdgs.findIndex((s) => s.slug === sdgSlug);
   const prevSdg = allSdgs[idx - 1];
   const nextSdg = allSdgs[idx + 1];
-  const countryRow = COUNTRY_SDG_SCORES.find((c) => c.country === country);
 
-  const metricVals = useMemo(() => {
-    const base = getMockMetricValues(sdg.id, country);
-    if (!liveData?.sdgScores) return base;
+  const { data: countryYearScores, isLoading: scoreLoading } = useQuery<FetchCountrySdgScoresResponse>({
+    queryKey: ["country-sdg-scores-direct", countryIso2, selectedYear],
+    queryFn: () => fetchCountrySdgScores(countryIso2 as string, selectedYear),
+    enabled: !!countryIso2,
+    staleTime: 1000 * 60 * 15,
+  });
 
-    const liveSdg = Object.values(liveData.sdgScores).find((s: any) => s.id === sdg.id) as any;
-    if (!liveSdg?.metrics) return base;
+  const currentSdg = useMemo(() => {
+    return countryYearScores?.sdgScores.find((s) => s.sdgId === sdg.id) ?? null;
+  }, [countryYearScores, sdg.id]);
 
-    const merged = { ...base };
+  const liveSdgScore = currentSdg?.score ?? null;
+  const displayScore = liveSdgScore;
 
-    for (const [key, val] of Object.entries(liveSdg.metrics)) {
-      if (merged[key]) {
-        const raw =
-          val && typeof val === "object" && "value" in val
-            ? (val as { value: string | number }).value
-            : val;
-
-        merged[key] = {
-          ...merged[key],
-          value: typeof raw === "string" || typeof raw === "number" ? raw : String(raw ?? ""),
-        };
-      }
-    }
-
-    return merged;
-  }, [liveData, country, sdg.id]);
-
-  const liveSdgScore = useMemo(() => {
-    if (!liveData?.sdgScores) return null;
-    const s = Object.values(liveData.sdgScores).find((s: any) => s.id === sdg.id) as any;
-    return s?.score ?? null;
-  }, [liveData, sdg.id]);
-
-  const displayScore = liveSdgScore ?? countryRow?.sdgScores?.[sdg.id] ?? 0;
-  const trendData = generateSdgTrendData(sdg.id, country);
-  const forecastData = generateForecastData(sdg.id, country);
-  const anomalies = detectAnomalies(sdg.id, country);
-  const benchmarks = getBenchmarks(sdg.id, country);
-  const topCountries = getTopCountriesForSdg(sdg.id, 12);
-  const forecastLabel = SDG_FORECAST_LABELS[sdg.id];
-
-  const indicatorMap: Record<number, string> = {
-    3: "PM2.5-exposure",
-    5: "gender-gap",
-    6: "WEI-plus",
-    7: "RES-total-pct",
-    8: "GDP-per-capita",
-    9: "energy-productivity",
-    10: "GDP-disparity",
-    11: "PM2.5-AQI",
-    12: "waste-per-capita",
-    13: "GHG-per-capita",
-    15: "green-coverage",
-    17: "dataset-coverage",
-  };
-
-  const indicator = indicatorMap[sdg.id];
+  const { data: liveMetricSeries, isLoading: metricsLoading } = useQuery({
+    queryKey: ["indicator-all-metrics", sdg.id, country],
+    queryFn: () => fetchIndicatorData(sdg.id, country),
+    enabled: !!country && !!sdg.id,
+    staleTime: 1000 * 60 * 15,
+  });
 
   const { data: liveForecast, isLoading: forecastLoading } = useQuery({
-    queryKey: ["indicator-forecast", sdg.id, countryId],
-    queryFn: () => fetchIndicatorData(sdg.id, countryId!),
-    enabled: !!indicator && !!countryId && tab === "Forecast",
+    queryKey: ["indicator-forecast", sdg.id, country],
+    queryFn: () => fetchIndicatorData(sdg.id, country, 1),
+    enabled: !!country && !!sdg.id && tab === "Forecast",
     staleTime: 1000 * 60 * 15,
   });
 
-  const mergedForecastData = useMemo(() => {
-    if (!liveForecast?.data || !indicator) return forecastData;
+  const { data: liveRankings = [] } = useQuery<SDGScore[]>({
+    queryKey: ["sdg-rankings", sdg.id, selectedYear],
+    queryFn: () => fetchSDGScoresBySDGYear(sdg.id, selectedYear),
+    enabled: !!sdg.id,
+    staleTime: 1000 * 60 * 15,
+  });
 
-    const points: Record<number, any> = {};
-    liveForecast.data.forEach((d: any) => {
-      const year = new Date(d.date).getFullYear();
-      if (!points[year]) points[year] = { year };
+  const benchmarkQueries = useQueries({
+    queries: sdg.metrics.map((metric) => ({
+      queryKey: ["metric-benchmark", sdg.id, metric.key, selectedYear],
+      queryFn: (): Promise<MetricBenchmarkCountryValue[]> =>
+        fetchMetricBenchmarkByCountryYear(sdg.id, metric.key, selectedYear),
+      enabled: tab === "Benchmarks",
+      staleTime: 1000 * 60 * 15,
+    })),
+  });
 
-      if (d.is_forecast || d.isforecast) {
-        points[year].projected = d.value;
-        points[year].isProjected = true;
-        points[year].upper = d.conf_high ?? d.confhigh ?? d.value * 1.05;
-        points[year].lower = d.conf_low ?? d.conflow ?? d.value * 0.95;
-      } else {
-        points[year].actual = d.value;
+  const { data: liveAnomalies = [] } = useQuery<AnomalyView[]>({
+    queryKey: ["anomalies", countryIso2, sdg.id],
+    queryFn: async () => {
+      if (!countryIso2) return [];
+      const res = await fetch(`${API_BASE}/api/anomalies?country_code=${countryIso2}`);
+      if (!res.ok) return [];
+      const data: any[] = await res.json();
+      const sdgMetricNames = sdg.metrics.map((m) => getDbMetricName(sdg.id, m.key));
+
+      return data
+        .filter((a) => sdgMetricNames.includes(a.metric_name))
+        .map((a) => ({
+          year: parseInt((a.date ?? "").substring(0, 4), 10),
+          metric: String(a.metric_name),
+          value: Number(a.value ?? 0),
+          confidence: Number(a.confidence ?? 0),
+          p_low: a.p_low ?? null,
+          p_high: a.p_high ?? null,
+          label: `${a.metric_name} anomaly`,
+          description: `Detected anomaly in ${a.metric_name} on ${a.date}. Value: ${
+            a.value?.toFixed?.(2) ?? a.value
+          }.`,
+          severity: ((a.confidence ?? 0.5) < 0.4 ? "critical" : "warning") as AnomalyView["severity"],
+          deviation: a.value != null && a.p_low != null ? Number((a.value - a.p_low).toFixed(2)) : 0,
+          expected: a.p_low != null ? Number(a.p_low).toFixed(2) : "N/A",
+        }))
+        .sort((a, b) => b.year - a.year)
+        .slice(0, 20);
+    },
+    enabled: !!countryIso2,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  const metricSeriesMap = useMemo(() => {
+    const map: Record<string, IndicatorSeries> = {};
+    (liveMetricSeries?.data ?? []).forEach((series) => {
+      if (series.metricKey) map[series.metricKey] = series;
+    });
+    return map;
+  }, [liveMetricSeries]);
+
+  const metricVals = useMemo<Record<string, MetricValueView>>(() => {
+    const result: Record<string, MetricValueView> = {};
+
+    sdg.metrics.forEach((m, idx) => {
+      const series = metricSeriesMap[m.key];
+      const currentValue = yearValue(series, selectedYear, false);
+      const prevValue = yearValue(series, selectedYear - 1, false);
+
+      const benchmarkRows = (benchmarkQueries[idx]?.data ?? []) as MetricBenchmarkCountryValue[];
+      const benchmark = average(benchmarkRows.map((r) => r.value));
+
+      if (currentValue != null) {
+        result[m.key] = {
+          value: currentValue,
+          trend: prevValue != null ? Number((currentValue - prevValue).toFixed(2)) : undefined,
+          benchmark,
+        };
       }
-
-      points[year].target = forecastData[0]?.target;
-      points[year].eu27 = forecastData.find((f) => f.year === year)?.eu27;
     });
 
-    return Object.values(points).sort((a: any, b: any) => a.year - b.year);
-  }, [liveForecast, forecastData, indicator]);
+    return result;
+  }, [sdg.metrics, metricSeriesMap, selectedYear, benchmarkQueries]);
 
-  const { data: liveTrendSeries } = useQuery({
-    queryKey: ["indicator-trend", sdg.id, countryId],
-    queryFn: () => fetchIndicatorData(sdg.id, countryId!),
-    enabled: !!indicator && !!countryId,
-    staleTime: 1000 * 60 * 15,
-  });
+  const metricAvailability = Object.keys(metricVals).length > 0;
 
-  const mergedTrendData = useMemo(() => {
-    if (!liveTrendSeries?.data?.length) return trendData;
+  const trendSeries = useMemo<TrendPoint[]>(() => {
+    const firstSeries = liveMetricSeries?.data?.find((s) => s.data?.some((d) => !d.is_forecast));
+    if (!firstSeries?.data?.length) return [];
 
-    const liveMap: Record<number, number> = {};
-    liveTrendSeries.data
-      .filter((d: any) => !(d.is_forecast || d.isforecast))
-      .forEach((d: any) => {
-        liveMap[new Date(d.date).getFullYear()] = d.value;
-      });
+    return firstSeries.data
+      .filter((d) => !d.is_forecast)
+      .sort((a, b) => a.year - b.year)
+      .map((d) => ({
+        year: d.year,
+        value: d.value,
+        eu27: null,
+      }));
+  }, [liveMetricSeries]);
 
-    return trendData.map((t) => ({
-      ...t,
-      value: liveMap[t.year] ?? t.value,
-    }));
-  }, [liveTrendSeries, trendData]);
+  const forecastSeries = useMemo<ForecastPoint[]>(() => {
+    const firstSeries = liveForecast?.data?.[0];
+    if (!firstSeries?.data?.length) return [];
 
-  const { data: liveTopCountriesList } = useQuery({
-    queryKey: ["sdg-top-countries", sdg.id],
-    queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/sdg-scores/sdg/${sdg.id}?year=2024`);
-      if (!res.ok) return null;
+    const grouped: Record<number, ForecastPoint> = {};
+    firstSeries.data.forEach((d) => {
+      if (!grouped[d.year]) grouped[d.year] = { year: d.year };
+      if (d.is_forecast) {
+        grouped[d.year].projected = d.value;
+        grouped[d.year].upper = d.conf_high ?? d.value * 1.05;
+        grouped[d.year].lower = d.conf_low ?? d.value * 0.95;
+        grouped[d.year].isProjected = true;
+      } else {
+        grouped[d.year].actual = d.value;
+      }
+    });
 
-      const dbData = await res.json();
-      const countryList = await fetchCountriesList();
-      const countryMap = Object.fromEntries(countryList.map((c: any) => [c.country_id, c]));
+    return Object.values(grouped).sort((a, b) => a.year - b.year);
+  }, [liveForecast]);
 
-      return dbData
-        .sort((a: any, b: any) => (b.normalised_score ?? 0) - (a.normalised_score ?? 0))
-        .slice(0, 12)
-        .map((s: any) => ({
-          name: countryMap[s.country_id]?.name ?? `Country ${s.country_id}`,
-          country: countryMap[s.country_id]?.name ?? `Country ${s.country_id}`,
-          score: Number(s.normalised_score ?? 0),
-          csi: 0,
-        }));
-    },
-    staleTime: 1000 * 60 * 30,
-    retry: 1,
-  });
+  const allLiveRankings = useMemo<RankingPoint[]>(() => {
+    if (!liveRankings?.length) return [];
+    return [...liveRankings]
+      .filter((r) => typeof r.normalised_score === "number")
+      .sort((a, b) => (b.normalised_score ?? 0) - (a.normalised_score ?? 0))
+      .map((s, i) => ({
+        rank: i + 1,
+        country_name: s.country_name,
+        country_iso2: s.country_iso2,
+        score: Number(s.normalised_score ?? 0),
+      }));
+  }, [liveRankings]);
 
-  const displayTopCountries = liveTopCountriesList ?? topCountries.slice(0, 6);
-  const hasLiveTrend = !!liveTrendSeries?.data?.length;
-  const hasLiveTopCountries = !!liveTopCountriesList?.length;
+  const displayTopCountries = useMemo(() => allLiveRankings.slice(0, 6), [allLiveRankings]);
+
+  const benchmarkRows = useMemo<BenchmarkRow[]>(() => {
+    return sdg.metrics
+      .map((m, idx) => {
+        const metricValue = metricVals[m.key];
+        const rows = (benchmarkQueries[idx]?.data ?? []) as MetricBenchmarkCountryValue[];
+        if (!metricValue || typeof metricValue.value !== "number" || !rows.length) return null;
+
+        const selectedCountryRow = rows.find((r) => r.country === country || r.iso2 === countryIso2) ?? null;
+        if (!selectedCountryRow) return null;
+
+        const sorted = [...rows].sort((a, b) => (m.higherIsBetter ? b.value - a.value : a.value - b.value));
+
+        const eu27Avg = average(rows.map((r) => r.value)) ?? 0;
+        const top = sorted[0];
+        const bottom = sorted[sorted.length - 1];
+        const target = m.euTarget ?? m.whoThreshold ?? null;
+
+        const performanceGap = Number(
+          (
+            m.higherIsBetter
+              ? selectedCountryRow.value - eu27Avg
+              : eu27Avg - selectedCountryRow.value
+          ).toFixed(2)
+        );
+
+        const targetGap =
+          target != null
+            ? Number(
+                (
+                  m.higherIsBetter ? selectedCountryRow.value - target : target - selectedCountryRow.value
+                ).toFixed(2)
+              )
+            : null;
+
+        return {
+          metricKey: m.key,
+          metricLabel: m.label,
+          unit: m.unit,
+          countryValue: Number(selectedCountryRow.value.toFixed(2)),
+          eu27Avg,
+          topCountry: top?.country ?? "—",
+          topValue: Number((top?.value ?? 0).toFixed(2)),
+          bottomCountry: bottom?.country ?? "—",
+          bottomValue: Number((bottom?.value ?? 0).toFixed(2)),
+          performanceGap,
+          targetGap,
+          euTarget: m.euTarget ?? null,
+          whoThreshold: m.whoThreshold ?? null,
+        } as BenchmarkRow;
+      })
+      .filter(Boolean) as BenchmarkRow[];
+  }, [sdg.metrics, metricVals, benchmarkQueries, country, countryIso2]);
+
+  const hasLiveTrend = trendSeries.length > 0;
+  const hasLiveTopCountries = displayTopCountries.length > 0;
+  const anomalies = liveAnomalies ?? [];
 
   useEffect(() => {
     if (!TABS.includes(tab)) setTab("Overview");
@@ -615,7 +663,7 @@ export default function SDGDetail() {
             </div>
           </div>
 
-          <div className="bg-white/80 rounded-xl p-4 border border-slate-200/60 min-w-[190px]">
+          <div className="bg-white/80 rounded-xl p-4 border border-slate-200/60 min-w-[220px]">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
               Viewing Country
             </label>
@@ -625,9 +673,24 @@ export default function SDGDetail() {
               value={country}
               onChange={(e) => setCountry(e.target.value)}
             >
-              {COUNTRY_SDG_SCORES.map((c) => (
-                <option key={c.country} value={c.country}>
-                  {c.country}
+              {countriesList.map((c) => (
+                <option key={c.iso2} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mt-2.5 mb-1.5">
+              Viewing Year
+            </label>
+            <select
+              className="w-full text-xs font-bold text-slate-800 bg-transparent border-none outline-none cursor-pointer"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+            >
+              {[2023, 2024, 2025].map((y) => (
+                <option key={y} value={y}>
+                  {y}
                 </option>
               ))}
             </select>
@@ -636,23 +699,27 @@ export default function SDGDetail() {
               <div className="flex items-center justify-between">
                 <div className="flex flex-col">
                   <span className="text-[11px] text-slate-400">SDG Score</span>
-                  {liveSdgScore != null ? (
+                  {scoreLoading ? (
+                    <span className="text-[9px] text-blue-600 font-bold bg-blue-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">
+                      Loading
+                    </span>
+                  ) : liveSdgScore != null ? (
                     <span className="text-[9px] text-green-600 font-bold bg-green-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">
                       Live
                     </span>
                   ) : (
-                    <span className="text-[9px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">
-                      Static Cache
+                    <span className="text-[9px] text-red-600 font-bold bg-red-50 px-1.5 py-0.5 rounded-full inline-block mt-0.5">
+                      Unavailable
                     </span>
                   )}
                 </div>
 
-                <span className="text-2xl font-black font-display" style={{ color: sdg.color }}>
-                  {displayScore}
+                <span className={`text-2xl font-black font-display ${getScoreColor(displayScore)}`}>
+                  {liveSdgScore != null ? displayScore?.toFixed(1) : "—"}
                 </span>
               </div>
 
-              {countryRow && (
+              {liveSdgScore != null && (
                 <>
                   <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
                     <div
@@ -661,7 +728,8 @@ export default function SDGDetail() {
                     />
                   </div>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    {countryRow.cluster} · P{countryRow.percentile}
+                    {countryYearScores?.cluster ?? "—"}
+                    {countryYearScores?.percentile != null ? ` · P${countryYearScores.percentile}` : ""}
                   </p>
                 </>
               )}
@@ -674,24 +742,20 @@ export default function SDGDetail() {
         {TABS.map((t) => {
           const Icon = TAB_ICONS[t];
           const isAnomaly = t === "Anomalies" && anomalies.length > 0;
-          const hasLiveIndicator = t !== "Country Rankings" && t !== "Overview" && t !== "Forecast" && LIVE_SDG_IDS.includes(sdg.id);
+          const hasLiveIndicator = LIVE_SDG_IDS.includes(sdg.id);
 
           return (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`flex items-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold border-b-2 whitespace-nowrap transition-all ${
-                tab === t
-                  ? "border-blue-600 text-blue-700"
-                  : "border-transparent text-slate-400 hover:text-slate-700"
+                tab === t ? "border-blue-600 text-blue-700" : "border-transparent text-slate-400 hover:text-slate-700"
               }`}
             >
               <div className="flex items-center gap-1.5">
                 <div
                   className={`w-1.5 h-1.5 rounded-full ${
-                    hasLiveIndicator
-                      ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]"
-                      : "bg-red-500"
+                    hasLiveIndicator ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" : "bg-red-500"
                   }`}
                 />
                 <Icon className="w-3.5 h-3.5" />
@@ -713,74 +777,76 @@ export default function SDGDetail() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display font-bold text-slate-800">Key Metrics · {country}</h2>
-              <p className="text-xs text-slate-400">Click a card to expand details</p>
+              <p className="text-xs text-slate-400">Live indicator values by metric</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sdg.metrics.map((m) => {
-                const isLive = LIVE_SDG_IDS.includes(sdg.id);
-                const rawVal = metricVals[m.key];
-                const safeVal = rawVal
-                  ? {
-                      ...rawVal,
-                      value:
-                        typeof rawVal.value === "object" && rawVal.value !== null
-                          ? String((rawVal.value as any).value ?? rawVal.value)
-                          : rawVal.value,
-                    }
-                  : rawVal;
-
-                return (
+            {metricsLoading ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400">
+                <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2 text-slate-400" />
+                <p className="font-semibold">Loading live metrics...</p>
+              </div>
+            ) : !metricAvailability ? (
+              <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400">
+                <p className="font-semibold">No live metric values available for this country and year</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {sdg.metrics.map((m) => (
                   <MetricBlock
                     key={m.key}
-                    metric={{ ...m, isLive }}
-                    vals={safeVal}
+                    metric={{ ...m, isLive: true }}
+                    vals={metricVals[m.key]}
                     color={sdg.color}
                   />
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div className="bg-white border border-slate-200 rounded-xl p-5">
-              <h3 className="font-display font-semibold text-slate-800 mb-1">Score Trend 2015–2024</h3>
+              <h3 className="font-display font-semibold text-slate-800 mb-1">Metric Trend 2015–{selectedYear}</h3>
               <p className="text-xs text-slate-400 mb-4">
-                {country} vs EU27 average
+                {country} live time series
                 {hasLiveTrend ? (
                   <span className="ml-2 text-[10px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
                     Live DB
                   </span>
                 ) : (
                   <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                    Estimated trend
+                    No data
                   </span>
                 )}
               </p>
 
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={mergedTrendData}>
-                  <defs>
-                    <linearGradient id={`ov-${sdg.id}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={sdg.color} stopOpacity={0.2} />
-                      <stop offset="100%" stopColor={sdg.color} stopOpacity={0.01} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                  <XAxis dataKey="year" tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                  <Tooltip content={<ChartTip />} />
-                  <Area dataKey="eu27" name="EU27" stroke="#CBD5E1" fill="none" strokeWidth={1.5} dot={false} />
-                  <Area
-                    dataKey="value"
-                    name={country}
-                    stroke={sdg.color}
-                    fill={`url(#ov-${sdg.id})`}
-                    strokeWidth={2.5}
-                    dot={{ r: 3, fill: sdg.color, stroke: "white", strokeWidth: 1.5 }}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              {hasLiveTrend ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <AreaChart data={trendSeries}>
+                    <defs>
+                      <linearGradient id={`ov-${sdg.id}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={sdg.color} stopOpacity={0.2} />
+                        <stop offset="100%" stopColor={sdg.color} stopOpacity={0.01} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                    <XAxis dataKey="year" tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
+                    <Tooltip content={<ChartTip />} />
+                    <Area
+                      dataKey="value"
+                      name={country}
+                      stroke={sdg.color}
+                      fill={`url(#ov-${sdg.id})`}
+                      strokeWidth={2.5}
+                      dot={{ r: 3, fill: sdg.color, stroke: "white", strokeWidth: 1.5 }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-sm text-slate-400">
+                  Trend data unavailable
+                </div>
+              )}
             </div>
 
             <div className="bg-white border border-slate-200 rounded-xl p-5">
@@ -793,25 +859,44 @@ export default function SDGDetail() {
                   </span>
                 ) : (
                   <span className="ml-2 text-[10px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
-                    Cached scores
+                    No data
                   </span>
                 )}
               </p>
 
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={displayTopCountries.slice(0, 6)} layout="vertical" margin={{ left: 0, right: 40 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
-                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                  <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "#475569", fontWeight: 600 }} tickLine={false} axisLine={false} width={85} />
-                  <Tooltip content={<ChartTip />} cursor={{ fill: "#F8FAFC" }} />
-                  <Bar dataKey="score" name="Score" radius={[0, 6, 6, 0]} barSize={16}>
-                    {displayTopCountries.slice(0, 6).map((_: any, i: number) => (
-                      <Cell key={i} fill={sdg.color} fillOpacity={1 - i * 0.13} />
-                    ))}
-                    <LabelList dataKey="score" position="right" style={{ fontSize: 11, fill: "#64748B", fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {hasLiveTopCountries ? (
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={displayTopCountries} layout="vertical" margin={{ left: 0, right: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" horizontal={false} />
+                    <XAxis
+                      type="number"
+                      domain={[0, 100]}
+                      tick={{ fontSize: 10, fill: "#94A3B8" }}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      dataKey="country_name"
+                      type="category"
+                      tick={{ fontSize: 11, fill: "#475569", fontWeight: 600 }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={85}
+                    />
+                    <Tooltip content={<ChartTip />} cursor={{ fill: "#F8FAFC" }} />
+                    <Bar dataKey="score" name="Score" radius={[0, 6, 6, 0]} barSize={16}>
+                      {displayTopCountries.map((_, i) => (
+                        <Cell key={i} fill={sdg.color} fillOpacity={1 - i * 0.13} />
+                      ))}
+                      <LabelList dataKey="score" position="right" style={{ fontSize: 11, fill: "#64748B", fontWeight: 700 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[200px] flex items-center justify-center text-sm text-slate-400">
+                  Ranking data unavailable
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -825,28 +910,11 @@ export default function SDGDetail() {
               <div>
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                  <h2 className="font-display font-bold text-slate-800">
-                    {forecastLabel?.title ?? "Predictive Forecast"}
-                  </h2>
+                  <h2 className="font-display font-bold text-slate-800">Predictive Forecast</h2>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Historical 2015–2024 · Predictive projection 2025–2030 · 80% confidence interval
+                  Historical + forecast values from live indicator API
                 </p>
-              </div>
-
-              <div className="ml-auto flex items-center gap-4 text-xs">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-6 h-0.5 bg-blue-600 inline-block rounded" />
-                  Actual
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-6 h-0.5 border-t-2 border-dashed border-blue-400 inline-block" />
-                  Projected
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-6 h-3 bg-blue-100 inline-block rounded" />
-                  CI Band
-                </span>
               </div>
             </div>
           </div>
@@ -856,12 +924,16 @@ export default function SDGDetail() {
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center">
                   <RefreshCw className="w-8 h-8 animate-spin mx-auto text-blue-500 mb-2" />
-                  <p className="text-sm text-slate-500">Generating ML Forecast...</p>
+                  <p className="text-sm text-slate-500">Loading forecast...</p>
                 </div>
+              </div>
+            ) : forecastSeries.length === 0 ? (
+              <div className="flex-1 flex items-center justify-center text-slate-400">
+                Forecast unavailable for this metric
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={340}>
-                <ComposedChart data={mergedForecastData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                <ComposedChart data={forecastSeries} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="ci-band" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#3B82F6" stopOpacity={0.15} />
@@ -870,27 +942,11 @@ export default function SDGDetail() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                   <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
                   <Tooltip content={<ChartTip />} />
                   <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
-                  <ReferenceLine
-                    x={2024}
-                    stroke="#E2E8F0"
-                    strokeDasharray="4 4"
-                    label={{ value: "2024", position: "insideTopLeft", fontSize: 10, fill: "#94A3B8" }}
-                  />
-                  {forecastData[0]?.target != null && (
-                    <ReferenceLine
-                      y={forecastData[0].target}
-                      stroke="#F59E0B"
-                      strokeDasharray="6 3"
-                      strokeWidth={1.5}
-                      label={{ value: "EU 2030 Target", position: "right", fontSize: 10, fill: "#B45309" }}
-                    />
-                  )}
                   <Area dataKey="upper" name="Upper bound" stroke="none" fill="url(#ci-band)" legendType="none" />
                   <Area dataKey="lower" name="Lower bound" stroke="none" fill="white" legendType="none" />
-                  <Line dataKey="eu27" name="EU27 Avg" stroke="#94A3B8" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
                   <Line
                     dataKey="actual"
                     name={`${country} actual`}
@@ -916,62 +972,30 @@ export default function SDGDetail() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {[
               {
-                label: "Current Score 2024",
-                val: mergedForecastData.find((d: any) => d.year === 2024)?.actual?.toFixed(1),
+                label: `Current ${selectedYear}`,
+                val:
+                  forecastSeries.find((d) => d.year === selectedYear)?.actual ??
+                  forecastSeries.find((d) => d.year === selectedYear)?.projected,
                 color: sdg.color,
               },
               {
-                label: "Projected Score 2030",
-                val: mergedForecastData.find((d: any) => d.year === 2030)?.projected?.toFixed(1),
+                label: "Projected 2030",
+                val: forecastSeries.find((d) => d.year === 2030)?.projected,
                 color: "#2563eb",
               },
               {
-                label: "EU 2030 Target",
-                val: forecastData[0]?.target?.toFixed(1) ?? "NA",
-                color: "#d97706",
+                label: "Upper 2030",
+                val: forecastSeries.find((d) => d.year === 2030)?.upper,
+                color: "#15803d",
               },
             ].map((item) => (
               <div key={item.label} className="bg-white border border-slate-200 rounded-xl p-4 text-center">
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">{item.label}</p>
                 <p className="text-3xl font-black font-display" style={{ color: item.color }}>
-                  {item.val ?? "—"}
+                  {item.val != null ? Number(item.val).toFixed(1) : "—"}
                 </p>
               </div>
             ))}
-          </div>
-
-          <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <h3 className="font-display font-semibold text-slate-800 mb-3">Scenario Projections to 2030</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-100">
-                    {["Year", "Projected", "Optimistic upper", "Pessimistic lower", "EU27 Avg"].map((h) => (
-                      <th key={h} className="px-4 py-2.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {mergedForecastData
-                    .filter((d: any) => d.isProjected)
-                    .map((d: any, i: number) => (
-                      <tr key={d.year} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <td className="px-4 py-2.5 font-bold text-slate-700">{d.year}</td>
-                        <td className="px-4 py-2.5">
-                          <span className="font-bold" style={{ color: sdg.color }}>
-                            {d.projected?.toFixed(1)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-green-600 font-semibold">{d.upper?.toFixed(1)}</td>
-                        <td className="px-4 py-2.5 text-red-500 font-semibold">{d.lower?.toFixed(1)}</td>
-                        <td className="px-4 py-2.5 text-slate-500">{d.eu27?.toFixed?.(1)}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
       )}
@@ -984,48 +1008,55 @@ export default function SDGDetail() {
               <div>
                 <h2 className="font-display font-bold text-slate-800">Metric Benchmarking · {country}</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Each metric compared vs EU27 average, top EU country, bottom EU country, and official targets
+                  Live metric value against the same metric across countries and configured targets
                 </p>
               </div>
-              <span className="ml-auto text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2.5 py-1">
-                Illustrative statistical model
+              <span className="ml-auto text-[10px] font-semibold text-green-700 bg-green-100 border border-green-200 rounded-full px-2.5 py-1">
+                Live model
               </span>
             </div>
           </div>
 
-          {benchmarks.length === 0 ? (
+          {benchmarkRows.length === 0 ? (
             <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-400">
-              <p className="font-semibold">Benchmark data uses categorical metrics only, see Metric Guide tab</p>
+              <p className="font-semibold">No live benchmark data available for this SDG</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {benchmarks.map((b: any) => {
+              {benchmarkRows.map((b) => {
                 const isGood = b.performanceGap >= 0;
                 const targetMet = b.targetGap != null && b.targetGap >= 0;
-                const maxVal = Math.max(
-                  b.countryValue,
-                  b.eu27Avg,
-                  b.topValue,
-                  b.euTarget ?? 0,
-                  b.whoThreshold ?? 0
-                ) * 1.15;
-                const barW = (v: number) => Math.min(100, (v / maxVal) * 100);
+                const maxVal =
+                  Math.max(
+                    b.countryValue,
+                    b.eu27Avg,
+                    b.topValue,
+                    b.bottomValue,
+                    b.euTarget ?? 0,
+                    b.whoThreshold ?? 0
+                  ) * 1.15;
+
+                const barW = (v: number) => Math.min(100, (v / (maxVal || 1)) * 100);
 
                 return (
                   <div key={b.metricKey} className="bg-white border border-slate-200 rounded-xl p-5">
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                       <h3 className="font-semibold text-slate-800">{b.metricLabel}</h3>
                       <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                          isGood ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
-                        }`}>
-                          {Math.abs(b.performanceGap).toFixed(1)} {b.unit} vs EU27
+                        <span
+                          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            isGood ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+                          }`}
+                        >
+                          {Math.abs(b.performanceGap).toFixed(1)} vs EU27
                         </span>
                         {b.targetGap != null && (
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            targetMet ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"
-                          }`}>
-                            {targetMet ? "Target met" : `${Math.abs(b.targetGap).toFixed(1)} ${b.unit} to target`}
+                          <span
+                            className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              targetMet ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {targetMet ? "Target met" : `${Math.abs(b.targetGap).toFixed(1)} to target`}
                           </span>
                         )}
                       </div>
@@ -1037,9 +1068,11 @@ export default function SDGDetail() {
                         { label: "EU27 Average", val: b.eu27Avg, color: "#64748B", bold: false },
                         { label: `Best ${b.topCountry}`, val: b.topValue, color: "#15803d", bold: false },
                         { label: `Worst ${b.bottomCountry}`, val: b.bottomValue, color: "#dc2626", bold: false },
-                        ...(b.euTarget != null ? [{ label: "EU 2030 Target", val: b.euTarget, color: "#F59E0B", bold: false }] : []),
-                        ...(b.whoThreshold != null ? [{ label: "WHO Threshold", val: b.whoThreshold, color: "#8B5CF6", bold: false }] : []),
-                      ].map((row: any) => (
+                        ...(b.euTarget != null ? [{ label: "EU Target", val: b.euTarget, color: "#F59E0B", bold: false }] : []),
+                        ...(b.whoThreshold != null
+                          ? [{ label: "WHO Threshold", val: b.whoThreshold, color: "#8B5CF6", bold: false }]
+                          : []),
+                      ].map((row) => (
                         <div key={row.label} className="flex items-center gap-3">
                           <span className={`text-xs w-36 shrink-0 truncate ${row.bold ? "font-bold text-slate-800" : "text-slate-500"}`}>
                             {row.label}
@@ -1055,7 +1088,7 @@ export default function SDGDetail() {
                             />
                           </div>
                           <span className="text-xs font-bold w-16 text-right shrink-0" style={{ color: row.color }}>
-                            {row.val} {b.unit}
+                            {Number(row.val).toFixed(1)}
                           </span>
                         </div>
                       ))}
@@ -1076,58 +1109,71 @@ export default function SDGDetail() {
               <div>
                 <h2 className="font-display font-bold text-slate-800">Anomaly Detection · {country}</h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Statistical outliers, Z-score gt 1.4, and known event-driven irregularities in historical data
+                  Live anomaly feed filtered to the selected SDG metrics
                 </p>
               </div>
               <div className="ml-auto flex items-center gap-2">
-                <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 border border-amber-200 rounded-full px-2.5 py-1">
-                  Illustrative model
-                </span>
-                <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full">
-                  {anomalies.length} detected
-                </span>
+                {anomalies.length > 0 ? (
+                  <span className="text-xs font-bold text-red-600 bg-red-100 px-2 py-1 rounded-full">
+                    {anomalies.length} detected
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-semibold text-green-700 bg-green-100 border border-green-200 rounded-full px-2.5 py-1">
+                    No anomalies
+                  </span>
+                )}
               </div>
             </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-xl p-5">
-            <h3 className="font-display font-semibold text-slate-800 mb-1">Score Timeline with Anomaly Markers</h3>
-            <p className="text-xs text-slate-400 mb-4">Red markers flag anomalies, hover for details</p>
+            <h3 className="font-display font-semibold text-slate-800 mb-1">Timeline with Anomaly Markers</h3>
+            <p className="text-xs text-slate-400 mb-4">Flagged years are marked on the live trend line</p>
 
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                <XAxis dataKey="year" tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
-                <Tooltip content={<ChartTip />} />
-                {anomalies.map((a: any) => (
-                  <ReferenceLine
-                    key={a.year}
-                    x={a.year}
-                    stroke={a.severity === "positive" ? "#15803d" : a.severity === "critical" ? "#dc2626" : "#d97706"}
-                    strokeDasharray="4 3"
-                    strokeWidth={1.5}
-                    label={{ value: "", position: "top", fontSize: 12 }}
+            {hasLiveTrend ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <ComposedChart data={trendSeries}>
+                  <defs>
+                    <linearGradient id={`ov-anom-${sdg.id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={sdg.color} stopOpacity={0.2} />
+                      <stop offset="100%" stopColor={sdg.color} stopOpacity={0.01} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
+                  <XAxis dataKey="year" tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} tickLine={false} axisLine={false} />
+                  <Tooltip content={<ChartTip />} />
+                  {anomalies.map((a) => (
+                    <ReferenceLine
+                      key={`${a.year}-${a.metric}`}
+                      x={a.year}
+                      stroke={a.severity === "critical" ? "#dc2626" : "#d97706"}
+                      strokeDasharray="4 3"
+                      strokeWidth={1.5}
+                    />
+                  ))}
+                  <Area
+                    dataKey="value"
+                    name={country}
+                    stroke={sdg.color}
+                    fill={`url(#ov-anom-${sdg.id})`}
+                    strokeWidth={2.5}
+                    dot={(props: any) => {
+                      const isAnom = anomalies.some((a) => a.year === props.payload?.year);
+                      return isAnom ? (
+                        <circle key={props.key} cx={props.cx} cy={props.cy} r={6} fill="#dc2626" stroke="white" strokeWidth={2} />
+                      ) : (
+                        <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill={sdg.color} stroke="white" strokeWidth={1.5} />
+                      );
+                    }}
                   />
-                ))}
-                <Area dataKey="eu27" name="EU27" stroke="#CBD5E1" fill="none" strokeWidth={1.5} dot={false} />
-                <Area
-                  dataKey="value"
-                  name={country}
-                  stroke={sdg.color}
-                  fill={`url(#ov-${sdg.id})`}
-                  strokeWidth={2.5}
-                  dot={(props: any) => {
-                    const isAnom = anomalies.some((a: any) => a.year === props.payload?.year);
-                    return isAnom ? (
-                      <circle key={props.key} cx={props.cx} cy={props.cy} r={6} fill="#dc2626" stroke="white" strokeWidth={2} />
-                    ) : (
-                      <circle key={props.key} cx={props.cx} cy={props.cy} r={3} fill={sdg.color} stroke="white" strokeWidth={1.5} />
-                    );
-                  }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[260px] flex items-center justify-center text-slate-400">
+                Trend data unavailable
+              </div>
+            )}
           </div>
 
           {anomalies.length === 0 ? (
@@ -1137,9 +1183,9 @@ export default function SDGDetail() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {anomalies.map((a: any) => {
+              {anomalies.map((a, idx) => {
                 const sev = a.severity;
-                const colors: Record<string, any> = {
+                const colors: Record<string, { bg: string; border: string; text: string; badge: string }> = {
                   critical: {
                     bg: "bg-red-50",
                     border: "border-red-200",
@@ -1152,31 +1198,25 @@ export default function SDGDetail() {
                     text: "text-amber-700",
                     badge: "bg-amber-100 text-amber-700",
                   },
-                  positive: {
-                    bg: "bg-green-50",
-                    border: "border-green-200",
-                    text: "text-green-700",
-                    badge: "bg-green-100 text-green-700",
-                  },
                 };
-                const c = colors[sev];
+                const c = colors[sev] ?? colors.warning;
 
                 return (
-                  <div key={a.year} className={`${c.bg} border ${c.border} rounded-xl p-4`}>
+                  <div key={`${a.metric}-${a.year}-${idx}`} className={`${c.bg} border ${c.border} rounded-xl p-4`}>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div>
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${c.text}`}>{a.year}</span>
                         <h4 className="font-bold text-slate-800 mt-0.5">{a.label}</h4>
                       </div>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0 ${c.badge}`}>
-                        {sev === "positive" ? "Positive" : sev === "critical" ? "Critical" : "Warning"}
+                        {sev === "critical" ? "Critical" : "Warning"}
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed mb-3">{a.description}</p>
                     <div className="flex gap-4 text-xs">
                       <div>
                         <span className="text-slate-400">Observed</span>
-                        <p className="font-bold text-slate-800">{a.value.toFixed(1)}</p>
+                        <p className="font-bold text-slate-800">{Number(a.value).toFixed(1)}</p>
                       </div>
                       <div>
                         <span className="text-slate-400">Expected</span>
@@ -1203,7 +1243,9 @@ export default function SDGDetail() {
           <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
             <div>
               <h2 className="font-display font-bold text-slate-800">All Country Rankings · {sdg.shortTitle}</h2>
-              <p className="text-xs text-slate-400 mt-0.5">{COUNTRY_SDG_SCORES.length} countries · click a row to switch country</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {allLiveRankings.length} countries · {selectedYear} live data · click a row to switch country
+              </p>
             </div>
             <span className="text-xs text-slate-400 border border-slate-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1">
               <Database className="w-3 h-3" />
@@ -1215,7 +1257,7 @@ export default function SDGDetail() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100">
-                  {["#", "Country", "Code", "SDG Score", "CSI", "Cluster"].map((h) => (
+                  {["#", "Country", "ISO2", "SDG Score"].map((h) => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">
                       {h}
                     </th>
@@ -1223,49 +1265,44 @@ export default function SDGDetail() {
                 </tr>
               </thead>
               <tbody>
-                {[...COUNTRY_SDG_SCORES]
-                  .sort((a, b) => (b.sdgScores?.[sdg.id] ?? 0) - (a.sdgScores?.[sdg.id] ?? 0))
-                  .map((c, i) => {
-                    const s = c.sdgScores?.[sdg.id] ?? 0;
-                    const col = scoreColor(s);
-
-                    return (
-                      <tr
-                        key={c.country}
-                        onClick={() => setCountry(c.country)}
-                        className={`border-b border-slate-50 cursor-pointer transition-colors ${
-                          c.country === country ? "bg-blue-50" : "hover:bg-slate-50"
-                        }`}
-                      >
-                        <td className="px-4 py-3 text-xs text-slate-400 font-mono">{i + 1}</td>
-                        <td className="px-4 py-3 font-semibold text-slate-800">{c.country}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                            {c.countryCode}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
-                              <div className="h-full rounded-full" style={{ width: `${s}%`, background: col }} />
-                            </div>
-                            <span className="text-sm font-bold" style={{ color: col }}>
-                              {s}
-                            </span>
+                {allLiveRankings.map((c) => {
+                  const s = c.score;
+                  const col = scoreHex(s);
+                  return (
+                    <tr
+                      key={`${c.country_name}-${c.country_iso2}`}
+                      onClick={() => setCountry(c.country_name)}
+                      className={`border-b border-slate-50 cursor-pointer transition-colors ${
+                        c.country_name === country ? "bg-blue-50" : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <td className="px-4 py-3 text-xs text-slate-400 font-mono">{c.rank}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-800">{c.country_name}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
+                          {c.country_iso2}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${s}%`, background: col }} />
                           </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className="text-xs font-bold px-2 py-0.5 rounded-lg"
-                            style={{ background: `${scoreColor(c.csi)}15`, color: scoreColor(c.csi) }}
-                          >
-                            {c.csi.toFixed(1)}
+                          <span className="text-sm font-bold" style={{ color: col }}>
+                            {s.toFixed(1)}
                           </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{c.cluster}</td>
-                      </tr>
-                    );
-                  })}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {allLiveRankings.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-slate-400">
+                      No ranking data available
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1281,7 +1318,7 @@ export default function SDGDetail() {
             </div>
             <div className="bg-white rounded-xl px-5 py-3 border border-blue-200 text-center">
               <p className="font-mono text-blue-700 font-bold text-base">CSI = Average of 12 SDG scores</p>
-              <p className="text-xs text-blue-400 mt-1">12 SDGs · scale 0–100 · SDG Achievement Rate = meeting EU benchmark</p>
+              <p className="text-xs text-blue-400 mt-1">12 SDGs · scale 0–100 · Achievement rate based on available SDG scores</p>
             </div>
           </div>
 

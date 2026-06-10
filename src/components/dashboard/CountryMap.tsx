@@ -175,7 +175,7 @@ export default function CountryMap({ selectedCountry, onCountryClick, liveCountr
 
               {/* Percentile */}
               <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-slate-500">EU Rank</span>
+                <span className="text-xs text-slate-500">EU Percentile</span>
                 <span className="text-[11px] font-medium text-slate-600">
                   P{hoverInfo.percentile} · {csiLabel(hoverInfo.csi)}
                 </span>
