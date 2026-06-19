@@ -2,7 +2,9 @@ import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { SDG_DEFINITIONS } from "@/data/sdgData";
 
 const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://187.127.164.121:8002";
+  import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "";
+// const API_BASE =
+//   import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://187.127.164.121:8002";
 
 const UI_TO_DB_METRIC_MAP: Record<string, string> = {
   airPollutionExposure: "SDG3_AIR_POLLUTION_EXPOSURE",

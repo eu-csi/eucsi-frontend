@@ -56,7 +56,7 @@ import { SDGDEFINITIONS } from "../data/sdgData";
 // const API_BASE =import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://187.127.164.121:8002";
 const API_BASE =
   import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||
-  "/api";
+  "";
 
 const LIVE_SDG_IDS: number[] = [3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17];
 
