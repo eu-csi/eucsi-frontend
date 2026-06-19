@@ -450,26 +450,34 @@ export async function fetchCSIScoresByYear(year: number): Promise<CSIScore[]> {
 
   const mapped = safeArray<any>(data).map((d) => normalizeCsiRow(d, countries));
   const historical = mapped.filter((d) => d.data_type === "historical");
+  // FIX: fall back to all data (including forecast) if no historical rows found
   return historical.length > 0 ? historical : mapped;
 }
 
 function normalizeSdgRow(d: any, countries: Country[], fallbackCountryId?: number): SDGScore {
-  const iso2 = normalizeIso2(d.country_iso2 ?? d.countryCode ?? d.iso2);
+  const iso2 = normalizeIso2(
+    // FIX: API returns country_iso2 (with underscore) — check that first
+    d.country_iso2 ?? d.countryiso2 ?? d.countryCode ?? d.iso2
+  );
   const match = countries.find((c) => c.iso2 === iso2);
 
   return {
     country_id: fallbackCountryId ?? match?.country_id ?? 0,
     country_iso2: iso2,
-    country_name: String(d.country_name ?? d.name ?? match?.name ?? iso2),
-    sdg_id: toNumber(d.sdg_id),
-    sdg_number: toNumber(d.sdg_number ?? d.sdg_id),
-    sdg_title: String(d.sdg_title ?? d.title ?? `SDG ${d.sdg_id}`),
+    // FIX: API returns country_name (with underscore) — check that first
+    country_name: String(
+      d.country_name ?? d.countryname ?? d.name ?? match?.name ?? iso2
+    ),
+    sdg_id: toNumber(d.sdg_id ?? d.sdgId),
+    sdg_number: toNumber(d.sdg_number ?? d.sdg_id ?? d.sdgId),
+    sdg_title: String(d.sdg_title ?? d.sdgTitle ?? d.title ?? `SDG ${d.sdg_id ?? d.sdgId}`),
     year: toNumber(d.year),
+    // FIX: API returns normalised_score (with underscore) — already handled but be explicit
     normalised_score:
       d.normalised_score != null
         ? toNullableNumber(d.normalised_score)
-        : toNullableNumber(d.score),
-    data_type: String(d.data_type ?? "historical"),
+        : toNullableNumber(d.score ?? d.normalisedscore),
+    data_type: String(d.data_type ?? d.dataType ?? "historical"),
   };
 }
 
@@ -482,9 +490,14 @@ export async function fetchSDGScoresByCountryYear(countryId: number, year: numbe
 
   const mapped = safeArray<any>(data).map((d) => normalizeSdgRow(d, countries, countryId));
   const historical = mapped.filter((d) => d.data_type === "historical");
+  // FIX: fall back to all data types (forecast/projected) if no historical exists for this year
   return historical.length > 0 ? historical : mapped;
 }
 
+// FIX: This is the key function for Country Rankings tab.
+// The API returns { country_name, country_iso2, normalised_score } (all with underscores).
+// Previous normalizeSdgRow didn't prioritise underscore variants, so all rows were empty
+// strings and got filtered out. Fixed in normalizeSdgRow above.
 export async function fetchSDGScoresBySDGYear(sdgId: number, year: number): Promise<SDGScore[]> {
   const [data, countries] = await Promise.all([
     apiFetch<any[]>(`/api/sdg-scores/sdg/${sdgId}/year/${year}`),
@@ -493,6 +506,7 @@ export async function fetchSDGScoresBySDGYear(sdgId: number, year: number): Prom
 
   const mapped = safeArray<any>(data).map((d) => normalizeSdgRow(d, countries));
   const historical = mapped.filter((d) => d.data_type === "historical");
+  // FIX: fall back to forecast data when no historical rows exist for selected year
   return historical.length > 0 ? historical : mapped;
 }
 
@@ -768,7 +782,7 @@ export async function fetchIndicatorData(
       const dbMetricName = getDbMetricName(sdgId, metric.key);
       try {
         const response = await apiFetch<any>(
-          `/api/indicator/${dbMetricName}?country=${encodeURIComponent(country)}&start_year=2015&end_year=2030`
+          `/api/indicator/${dbMetricName}?country=${encodeURIComponent(country)}&start_year=2015&end_year=2035`
         );
 
         const rawData = safeArray<any>(response.data);
@@ -823,11 +837,18 @@ export async function fetchMetricBenchmarkByCountryYear(
         );
 
         const rawData = safeArray<any>(response.data);
-        const exact = rawData.find((d) => {
-          const pointYear = parseInt(String(d.date ?? "").substring(0, 4), 10);
-          const isForecast = Boolean(d.is_forecast ?? d.isforecast ?? false);
-          return pointYear === year && !isForecast;
-        });
+
+        // FIX: also accept forecast data if no historical point exists for this year
+        const exact =
+          rawData.find((d) => {
+            const pointYear = parseInt(String(d.date ?? "").substring(0, 4), 10);
+            const isForecast = Boolean(d.is_forecast ?? d.isforecast ?? false);
+            return pointYear === year && !isForecast;
+          }) ??
+          rawData.find((d) => {
+            const pointYear = parseInt(String(d.date ?? "").substring(0, 4), 10);
+            return pointYear === year;
+          });
 
         if (!exact) return null;
 

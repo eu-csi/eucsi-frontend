@@ -225,10 +225,13 @@ function useAllCountries(selectedYear: number) {
 
       SDG_DEFINITIONS.forEach((sdg) => {
         const match = sdgRows.find((row) => row.sdg_id === sdg.id);
-        sdgScores[sdg.id] =
-          typeof match?.normalised_score === "number"
-            ? match.normalised_score
-            : (fallback?.sdgScores?.[sdg.id] ?? null);
+        sdgScores[sdg.id] = typeof match?.normalised_score === "number"
+  ? match.normalised_score
+  : null;
+        // sdgScores[sdg.id] =
+        //   typeof match?.normalised_score === "number"
+        //     ? match.normalised_score
+        //     : (fallback?.sdgScores?.[sdg.id] ?? null);
       });
 
       const validScores = Object.values(sdgScores).filter(
@@ -692,17 +695,17 @@ export default function Index() {
         <div className="flex items-center gap-2 self-start mt-1 flex-wrap">
           <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1">
             <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Year:</span>
-            <select
-              className="text-xs font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
-            >
-              {[2023, 2024, 2025].map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
+           <select
+  className="text-xs font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer"
+  value={selectedYear}
+  onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))}
+>
+  {Array.from({ length: 2035 - 2015 + 1 }, (_, i) => 2015 + i).map((y) => (
+    <option key={y} value={y}>
+      {y}
+    </option>
+  ))}
+</select>
           </div>
 
           {health.isLoading ? (
