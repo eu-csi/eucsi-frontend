@@ -23,7 +23,10 @@ import SDGScoreGrid from "@/components/dashboard/SDGScoreGrid";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { LiveCountryRecord } from "@/types/countryTypes";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
+// const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
+const API_BASE =
+  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||
+  "/api";
 
 type ClusterName =
   | "Nordic Leaders"
