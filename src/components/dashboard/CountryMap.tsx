@@ -12,15 +12,13 @@ import { COUNTRY_SDG_SCORES, type CountrySdgScore } from "@/data/sdgData";
 }
 
 function csiColor(s: number) {
-  if (s >= 80) return "#15803d"; // Nordic Leaders
-  if (s >= 68) return "#2563eb"; // Western Innovators
+  if (s >= 68) return "#2563eb"; // Western Innovators (merged with Nordic Leaders)
   if (s >= 55) return "#d97706"; // Mediterranean Transitioning
   if (s >= 50) return "#7c3aed"; // Central European Rising
   return "#dc2626";              // Eastern Emerging
 }
 
 function csiLabel(s: number) {
-  if (s >= 80) return "Nordic Leaders";
   if (s >= 68) return "Western Innovators";
   if (s >= 55) return "Mediterranean Transitioning";
   if (s >= 50) return "Central European Rising";
@@ -28,8 +26,7 @@ function csiLabel(s: number) {
 }
 
 const LEGEND = [
-  { label: "≥ 80  Nordic Leaders",              color: "#15803d" },
-  { label: "68–79 Western Innovators",           color: "#2563eb" },
+  { label: "≥ 68  Western Innovators",          color: "#2563eb" },
   { label: "55–67 Mediterranean Transitioning",  color: "#d97706" },
   { label: "50–54 Central European Rising",      color: "#7c3aed" },
   { label: "< 50  Eastern Emerging",             color: "#dc2626" },

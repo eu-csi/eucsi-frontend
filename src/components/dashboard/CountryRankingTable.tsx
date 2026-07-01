@@ -15,7 +15,6 @@ type SortDir = "asc" | "desc";
 // Correct cluster names from spec — 5 clusters matching CSI ranges
 const CLUSTERS = [
   "All",
-  "Nordic Leaders",
   "Western Innovators",
   "Mediterranean Transitioning",
   "Central European Rising",
@@ -23,7 +22,6 @@ const CLUSTERS = [
 ] as const;
 
 const CLUSTER_STYLES: Record<string, string> = {
-  "Nordic Leaders":               "bg-green-100 text-green-700 border border-green-200",
   "Western Innovators":           "bg-blue-100  text-blue-700  border border-blue-200",
   "Mediterranean Transitioning":  "bg-orange-100 text-orange-700 border border-orange-200",
   "Central European Rising":      "bg-violet-100 text-violet-700 border border-violet-200",
@@ -33,7 +31,6 @@ const CLUSTER_STYLES: Record<string, string> = {
 // ─── Sub-components ─────────────────────────────────────────────────────────
 function CsiPill({ score }: { score: number }) {
   const cls =
-    score >= 80 ? "bg-green-100 text-green-700 border border-green-200" :
     score >= 68 ? "bg-blue-100  text-blue-700  border border-blue-200"  :
     score >= 55 ? "bg-orange-100 text-orange-700 border border-orange-200" :
     score >= 50 ? "bg-violet-100 text-violet-700 border border-violet-200" :

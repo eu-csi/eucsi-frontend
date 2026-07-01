@@ -53,10 +53,7 @@ import {
 
 import { SDGDEFINITIONS } from "../data/sdgData";
 
-// const API_BASE =import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://187.127.164.121:8002";
-const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||
-  "";
+const API_BASE =import.meta.env.VITE_API_URL?.replace(/\/$/, "") || "http://187.127.164.121:8002";
 
 const LIVE_SDG_IDS: number[] = [3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 17];
 
@@ -171,21 +168,28 @@ function yearValue(
 ): number | null {
   if (!series?.data?.length || typeof year !== "number") return null;
 
-  const exact = series.data.find(
-    (d: any) => d.year === year && Boolean(d.is_forecast) === Boolean(forecast)
-  );
-  if (exact) return exact.value;
+  const findValForYear = (yr: number): number | null => {
+    if (yr < 2015) return null;
 
-  // Fallback: if historical point is missing for future years,
-  // allow forecast value for that same year.
-  if (!forecast) {
-    const forecastExact = series.data.find(
-      (d: any) => d.year === year && Boolean(d.is_forecast) === true
-    );
-    if (forecastExact) return forecastExact.value;
-  }
+    // Filter points for year yr
+    const yrPoints = series.data.filter((d: any) => d.year === yr);
+    if (yrPoints.length > 0) {
+      const validVals = yrPoints.map((d: any) => d.value).filter((v) => v !== null && v !== 0);
+      if (validVals.length > 0) {
+        return validVals.reduce((a, b) => a + b, 0) / validVals.length;
+      }
+    }
 
-  return null;
+    // Try previous year recursively
+    return findValForYear(yr - 1);
+  };
+
+  const val = findValForYear(year);
+  if (val !== null) return val;
+
+  // Last resort fallback
+  const fallbackMatch = series.data.find((d: any) => d.year === year);
+  return fallbackMatch ? fallbackMatch.value : null;
 }
 
 function ChartTip({ active, payload, label }: any) {
@@ -548,7 +552,21 @@ export default function SDGDetail() {
     return result;
   }, [sdg.metrics, metricSeriesMap, selectedYear, benchmarkQueries]);
 
-  const metricAvailability = Object.keys(metricVals).length > 0;
+  const filteredMetrics = useMemo(() => {
+    return sdg.metrics.filter((m) => {
+      const vals = metricVals[m.key];
+      return (
+        vals &&
+        vals.value !== "" &&
+        vals.value !== null &&
+        vals.value !== undefined &&
+        vals.value !== 0 &&
+        vals.value !== "0"
+      );
+    });
+  }, [sdg.metrics, metricVals]);
+
+  const metricAvailability = filteredMetrics.length > 0;
 
   const trendSeries = useMemo<TrendPoint[]>(() => {
     const firstSeries = liveMetricSeries?.data?.find((s) =>
@@ -919,7 +937,7 @@ export default function SDGDetail() {
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {sdg.metrics.map((m) => (
+                {filteredMetrics.map((m) => (
                   <MetricBlock
                     key={m.key}
                     metric={{ ...m, isLive: true }}

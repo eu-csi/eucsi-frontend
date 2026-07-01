@@ -23,10 +23,7 @@ import SDGScoreGrid from "@/components/dashboard/SDGScoreGrid";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { LiveCountryRecord } from "@/types/countryTypes";
 
-// const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
-const API_BASE =
-  import.meta.env.VITE_API_URL?.replace(/\/$/, "") ||
-  "";
+const API_BASE = import.meta.env.VITE_API_URL ?? "http://187.127.164.121:8002";
 
 type ClusterName =
   | "Nordic Leaders"
@@ -78,7 +75,6 @@ const CLUSTER_COLORS: Record<ClusterName, string> = {
 };
 
 const CLUSTER_ORDER: ClusterName[] = [
-  "Nordic Leaders",
   "Western Innovators",
   "Mediterranean Transitioning",
   "Central European Rising",
@@ -86,7 +82,6 @@ const CLUSTER_ORDER: ClusterName[] = [
 ];
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "#15803d";
   if (score >= 70) return "#2563eb";
   if (score >= 55) return "#d97706";
   if (score >= 50) return "#7c3aed";
@@ -94,7 +89,6 @@ function scoreColor(score: number): string {
 }
 
 function getCluster(score: number): ClusterName {
-  if (score >= 80) return "Nordic Leaders";
   if (score >= 68) return "Western Innovators";
   if (score >= 55) return "Mediterranean Transitioning";
   if (score >= 50) return "Central European Rising";
@@ -180,7 +174,19 @@ function useEu27Countries() {
       }
 
       const allCountries: ApiCountry[] = await res.json();
-      return allCountries.filter((c) => c.is_eu27 === true);
+      return allCountries
+        .filter((c) => c.is_eu27 === true)
+        .map((c) => {
+          const iso2 = c.iso2.toUpperCase();
+          let lon = c.longitude;
+          if (iso2 === "ES" || iso2 === "IE" || iso2 === "PT") {
+            if (lon > 0) lon = -lon;
+          }
+          return {
+            ...c,
+            longitude: lon,
+          };
+        });
     },
   });
 }
@@ -192,16 +198,67 @@ function useAllCountries(selectedYear: number) {
     queries: (countriesQuery.data ?? []).map((country) => ({
       queryKey: ["country-sdg-scores", country.iso2, selectedYear],
       queryFn: async (): Promise<ApiSdgScoreRow[]> => {
-        const res = await fetch(
-          `${API_BASE}/api/sdg-scores/country/${country.iso2}/year/${selectedYear}`
-        );
+        const fetchYearData = async (yr: number): Promise<ApiSdgScoreRow[]> => {
+          const res = await fetch(
+            `${API_BASE}/api/sdg-scores/country/${country.iso2}/year/${yr}`
+          );
+          if (!res.ok) {
+            if (res.status === 404) return [];
+            throw new Error(`Failed SDG fetch for ${country.iso2} year ${yr}`);
+          }
+          return res.json();
+        };
 
-        if (!res.ok) {
-          if (res.status === 404) return [];
-          throw new Error(`Failed SDG fetch for ${country.iso2}`);
-        }
+        const result = await fetchYearData(selectedYear);
 
-        return res.json();
+        const fillFallbacks = async (
+          currentScores: ApiSdgScoreRow[],
+          yr: number
+        ): Promise<ApiSdgScoreRow[]> => {
+          if (yr <= 2015) return currentScores;
+
+          const needsFallback = SDG_DEFINITIONS.some((sdg) => {
+            const match = currentScores.find((s) => s.sdg_id === sdg.id);
+            return (
+              !match ||
+              match.normalised_score === null ||
+              match.normalised_score === 0
+            );
+          });
+
+          if (!needsFallback) return currentScores;
+
+          const prevYearScores = await fetchYearData(yr - 1).catch(() => []);
+          const updatedScores = [...currentScores];
+
+          SDG_DEFINITIONS.forEach((sdg) => {
+            const matchIndex = updatedScores.findIndex((s) => s.sdg_id === sdg.id);
+            const prevMatch = prevYearScores.find((s) => s.sdg_id === sdg.id);
+
+            if (
+              prevMatch &&
+              prevMatch.normalised_score !== null &&
+              prevMatch.normalised_score !== 0
+            ) {
+              if (matchIndex >= 0) {
+                const currentVal = updatedScores[matchIndex].normalised_score;
+                if (currentVal === null || currentVal === 0) {
+                  updatedScores[matchIndex] = {
+                    ...updatedScores[matchIndex],
+                    normalised_score: prevMatch.normalised_score,
+                    year: prevMatch.year,
+                  };
+                }
+              } else {
+                updatedScores.push(prevMatch);
+              }
+            }
+          });
+
+          return fillFallbacks(updatedScores, yr - 1);
+        };
+
+        return fillFallbacks(result, selectedYear);
       },
       enabled: !!countriesQuery.data?.length,
       staleTime: 1000 * 60 * 15,
@@ -320,15 +377,67 @@ function useCountryOverview(countryName: string | null, selectedYear: number) {
         throw new Error(`Country not found in EU-27 list: ${countryName}`);
       }
 
-      const res = await fetch(
-        `${API_BASE}/api/sdg-scores/country/${country.iso2}/year/${selectedYear}`
-      );
+      const fetchYearData = async (yr: number): Promise<ApiSdgScoreRow[]> => {
+        const res = await fetch(
+          `${API_BASE}/api/sdg-scores/country/${country.iso2}/year/${yr}`
+        );
+        if (!res.ok) {
+          if (res.status === 404) return [];
+          throw new Error(`Failed to fetch SDG scores for ${country.iso2} year ${yr}`);
+        }
+        return res.json();
+      };
 
-      if (!res.ok) {
-        throw new Error(`Failed to fetch SDG scores for ${country.iso2}`);
-      }
+      const result = await fetchYearData(selectedYear);
 
-      const sdgRows: ApiSdgScoreRow[] = await res.json();
+      const fillFallbacks = async (
+        currentScores: ApiSdgScoreRow[],
+        yr: number
+      ): Promise<ApiSdgScoreRow[]> => {
+        if (yr <= 2015) return currentScores;
+
+        const needsFallback = SDG_DEFINITIONS.some((sdg) => {
+          const match = currentScores.find((s) => s.sdg_id === sdg.id);
+          return (
+            !match ||
+            match.normalised_score === null ||
+            match.normalised_score === 0
+          );
+        });
+
+        if (!needsFallback) return currentScores;
+
+        const prevYearScores = await fetchYearData(yr - 1).catch(() => []);
+        const updatedScores = [...currentScores];
+
+        SDG_DEFINITIONS.forEach((sdg) => {
+          const matchIndex = updatedScores.findIndex((s) => s.sdg_id === sdg.id);
+          const prevMatch = prevYearScores.find((s) => s.sdg_id === sdg.id);
+
+          if (
+            prevMatch &&
+            prevMatch.normalised_score !== null &&
+            prevMatch.normalised_score !== 0
+          ) {
+            if (matchIndex >= 0) {
+              const currentVal = updatedScores[matchIndex].normalised_score;
+              if (currentVal === null || currentVal === 0) {
+                updatedScores[matchIndex] = {
+                  ...updatedScores[matchIndex],
+                  normalised_score: prevMatch.normalised_score,
+                  year: prevMatch.year,
+                };
+              }
+            } else {
+              updatedScores.push(prevMatch);
+            }
+          }
+        });
+
+        return fillFallbacks(updatedScores, yr - 1);
+      };
+
+      const sdgRows = await fillFallbacks(result, selectedYear);
       const sdgScores: Record<number, number | null> = {};
       const liveSDGIds = new Set<number>();
 

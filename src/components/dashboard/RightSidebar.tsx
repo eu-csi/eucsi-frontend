@@ -66,8 +66,7 @@ const RightSidebar = () => {
       <MLSection icon={<Network className="w-3.5 h-3.5" />} title="Peer Group Clustering">
         <div className="space-y-1.5">
           {[
-            { name: "Nordic Leaders", countries: 3, csi: 85 },
-            { name: "Western Innovators", countries: 7, csi: 78 },
+            { name: "Western Innovators", countries: 10, csi: 80.1 },
             { name: "Mediterranean Trans.", countries: 6, csi: 65 },
             { name: "Central EU Rising", countries: 6, csi: 58 },
             { name: "Eastern Emerging", countries: 5, csi: 48 },
@@ -81,7 +80,7 @@ const RightSidebar = () => {
             </div>
           ))}
         </div>
-        <div className="eu-ml-badge text-[9px] w-fit">Sweden → Nordic Leaders</div>
+        <div className="eu-ml-badge text-[9px] w-fit">Sweden → Western Innovators</div>
       </MLSection>
 
       <MLSection icon={<TrendingUp className="w-3.5 h-3.5" />} title="Impact Estimator">

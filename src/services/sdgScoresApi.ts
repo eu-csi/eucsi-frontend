@@ -297,8 +297,8 @@ function calculateTrend(current: number | null, previous?: number | null): numbe
 }
 
 function toClusterName(value?: string | null): ClusterName | null {
+  if (value === "Nordic Leaders") return "Western Innovators";
   if (
-    value === "Nordic Leaders" ||
     value === "Western Innovators" ||
     value === "Mediterranean Transitioning" ||
     value === "Central European Rising" ||
@@ -318,19 +318,39 @@ async function fetchCountriesRaw(region?: string): Promise<Country[]> {
   const list = safeArray<any>(listRaw);
   const details = safeArray<any>(detailsRaw);
 
-  const merged = list.map((item, index) => {
-    const detail = details.find((d) => normalizeIso2(d.iso2) === normalizeIso2(item.iso2));
-    return {
-      country_id: toNumber(item.country_id ?? index + 1),
-      iso2: String(item.iso2 ?? "").toUpperCase(),
-      iso3: String(item.iso3 ?? item.iso2 ?? "").toUpperCase(),
-      name: String(item.name ?? detail?.name ?? ""),
-      is_eu27: Boolean(item.is_eu27 ?? detail?.is_eu27 ?? false),
-      latitude: toNumber(detail?.latitude, 0),
-      longitude: toNumber(detail?.longitude, 0),
-      region: String(detail?.region ?? item.region ?? "Other"),
-    } as Country;
-  });
+  const merged = list
+    .map((item, index) => {
+      const detail = details.find((d) => normalizeIso2(d.iso2) === normalizeIso2(item.iso2));
+      const iso2 = String(item.iso2 ?? "").toUpperCase();
+      const rawLat = toNumber(detail?.latitude, 0);
+      const rawLon = toNumber(detail?.longitude, 0);
+
+      let lat = rawLat;
+      let lon = rawLon;
+      // Fix wrong positive longitudes from API for Western countries
+      if (iso2 === "ES" || iso2 === "IE" || iso2 === "PT") {
+        if (lon > 0) lon = -lon;
+      }
+
+      return {
+        country_id: toNumber(item.country_id ?? index + 1),
+        iso2,
+        iso3: String(item.iso3 ?? item.iso2 ?? "").toUpperCase(),
+        name: String(item.name ?? detail?.name ?? ""),
+        is_eu27: Boolean(item.is_eu27 ?? detail?.is_eu27 ?? false),
+        latitude: lat,
+        longitude: lon,
+        region: String(detail?.region ?? item.region ?? "Other"),
+      } as Country;
+    })
+    .filter((c) => {
+      const eu27Codes = new Set([
+        "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR",
+        "DE", "EL", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL",
+        "PL", "PT", "RO", "SK", "SI", "ES", "SE",
+      ]);
+      return eu27Codes.has(c.iso2);
+    });
 
   if (region) {
     return merged.filter((c) => c.region.toLowerCase() === region.toLowerCase());
@@ -485,15 +505,58 @@ function normalizeSdgRow(d: any, countries: Country[], fallbackCountryId?: numbe
 
 export async function fetchSDGScoresByCountryYear(countryId: number, year: number): Promise<SDGScore[]> {
   const country = await fetchCountryById(countryId);
-  const [data, countries] = await Promise.all([
-    apiFetch<any[]>(`/api/sdg-scores/country/${country.iso2}/year/${year}`),
-    fetchCountriesRaw(),
-  ]);
+  const countries = await fetchCountriesRaw();
 
-  const mapped = safeArray<any>(data).map((d) => normalizeSdgRow(d, countries, countryId));
-  const historical = mapped.filter((d) => d.data_type === "historical");
-  // FIX: fall back to all data types (forecast/projected) if no historical exists for this year
-  return historical.length > 0 ? historical : mapped;
+  const fetchYearData = async (yr: number): Promise<SDGScore[]> => {
+    try {
+      const data = await apiFetch<any[]>(`/api/sdg-scores/country/${country.iso2}/year/${yr}`);
+      const mapped = safeArray<any>(data).map((d) => normalizeSdgRow(d, countries, countryId));
+      const historical = mapped.filter((d) => d.data_type === "historical");
+      return historical.length > 0 ? historical : mapped;
+    } catch {
+      return [];
+    }
+  };
+
+  const result = await fetchYearData(year);
+
+  const fillFallbacks = async (currentScores: SDGScore[], yr: number): Promise<SDGScore[]> => {
+    if (yr <= 2015) return currentScores;
+
+    const needsFallback = SDG_DEFINITIONS.some((sdg) => {
+      const match = currentScores.find((s) => s.sdg_id === sdg.id);
+      return !match || match.normalised_score === null || match.normalised_score === 0;
+    });
+
+    if (!needsFallback) return currentScores;
+
+    const prevYearScores = await fetchYearData(yr - 1);
+    const updatedScores = [...currentScores];
+
+    SDG_DEFINITIONS.forEach((sdg) => {
+      const matchIndex = updatedScores.findIndex((s) => s.sdg_id === sdg.id);
+      const prevMatch = prevYearScores.find((s) => s.sdg_id === sdg.id);
+
+      if (prevMatch && prevMatch.normalised_score !== null && prevMatch.normalised_score !== 0) {
+        if (matchIndex >= 0) {
+          const currentVal = updatedScores[matchIndex].normalised_score;
+          if (currentVal === null || currentVal === 0) {
+            updatedScores[matchIndex] = {
+              ...updatedScores[matchIndex],
+              normalised_score: prevMatch.normalised_score,
+              year: prevMatch.year,
+            };
+          }
+        } else {
+          updatedScores.push(prevMatch);
+        }
+      }
+    });
+
+    return fillFallbacks(updatedScores, yr - 1);
+  };
+
+  return fillFallbacks(result, year);
 }
 
 // FIX: This is the key function for Country Rankings tab.
@@ -501,15 +564,60 @@ export async function fetchSDGScoresByCountryYear(countryId: number, year: numbe
 // Previous normalizeSdgRow didn't prioritise underscore variants, so all rows were empty
 // strings and got filtered out. Fixed in normalizeSdgRow above.
 export async function fetchSDGScoresBySDGYear(sdgId: number, year: number): Promise<SDGScore[]> {
-  const [data, countries] = await Promise.all([
-    apiFetch<any[]>(`/api/sdg-scores/sdg/${sdgId}/year/${year}`),
-    fetchCountriesRaw(),
-  ]);
+  const countries = await fetchCountriesRaw();
 
-  const mapped = safeArray<any>(data).map((d) => normalizeSdgRow(d, countries));
-  const historical = mapped.filter((d) => d.data_type === "historical");
-  // FIX: fall back to forecast data when no historical rows exist for selected year
-  return historical.length > 0 ? historical : mapped;
+  const fetchYearData = async (yr: number): Promise<SDGScore[]> => {
+    try {
+      const data = await apiFetch<any[]>(`/api/sdg-scores/sdg/${sdgId}/year/${yr}`);
+      const mapped = safeArray<any>(data)
+        .map((d) => normalizeSdgRow(d, countries))
+        .filter((row) => countries.some((c) => c.iso2 === row.country_iso2));
+      const historical = mapped.filter((d) => d.data_type === "historical");
+      return historical.length > 0 ? historical : mapped;
+    } catch {
+      return [];
+    }
+  };
+
+  const result = await fetchYearData(year);
+
+  const fillFallbacks = async (currentScores: SDGScore[], yr: number): Promise<SDGScore[]> => {
+    if (yr <= 2015) return currentScores;
+
+    const needsFallback = countries.some((c) => {
+      const match = currentScores.find((s) => s.country_iso2 === c.iso2);
+      return !match || match.normalised_score === null || match.normalised_score === 0;
+    });
+
+    if (!needsFallback) return currentScores;
+
+    const prevYearScores = await fetchYearData(yr - 1);
+    const updatedScores = [...currentScores];
+
+    countries.forEach((c) => {
+      const matchIndex = updatedScores.findIndex((s) => s.country_iso2 === c.iso2);
+      const prevMatch = prevYearScores.find((s) => s.country_iso2 === c.iso2);
+
+      if (prevMatch && prevMatch.normalised_score !== null && prevMatch.normalised_score !== 0) {
+        if (matchIndex >= 0) {
+          const currentVal = updatedScores[matchIndex].normalised_score;
+          if (currentVal === null || currentVal === 0) {
+            updatedScores[matchIndex] = {
+              ...updatedScores[matchIndex],
+              normalised_score: prevMatch.normalised_score,
+              year: prevMatch.year,
+            };
+          }
+        } else {
+          updatedScores.push(prevMatch);
+        }
+      }
+    });
+
+    return fillFallbacks(updatedScores, yr - 1);
+  };
+
+  return fillFallbacks(result, year);
 }
 
 export async function fetchMetricValues(_metricId: number, _countryId?: number): Promise<MetricValue[]> {
@@ -529,22 +637,29 @@ export async function fetchCSIRankings(year: number): Promise<CountryRankingResp
     fetchCountriesRaw(),
   ]);
 
-  return safeArray<any>(data).map((d, index) => {
-    const iso2 = normalizeIso2(d.iso2 ?? d.country_iso2);
-    const match = countries.find((c) => c.iso2 === iso2);
+  return safeArray<any>(data)
+    .map((d, index) => {
+      const iso2 = normalizeIso2(d.iso2 ?? d.country_iso2);
+      const match = countries.find((c) => c.iso2 === iso2);
 
-    return {
-      rank: toNumber(d.rank ?? index + 1),
-      country_id: match?.country_id ?? 0,
-      iso2,
-      name: String(d.name ?? d.country_name ?? match?.name ?? iso2),
-      region: String(d.region ?? match?.region ?? "Other"),
-      is_eu27: Boolean(d.is_eu27 ?? match?.is_eu27 ?? false),
-      csi_score: toNumber(d.csi_score),
-      cluster: String(d.cluster ?? ""),
-      year: toNumber(d.year ?? year),
-    };
-  });
+      return {
+        rank: toNumber(d.rank ?? index + 1),
+        country_id: match?.country_id ?? 0,
+        iso2,
+        name: String(d.name ?? d.country_name ?? match?.name ?? iso2),
+        region: String(d.region ?? match?.region ?? "Other"),
+        is_eu27: Boolean(d.is_eu27 ?? match?.is_eu27 ?? false),
+        csi_score: toNumber(d.csi_score),
+        cluster: String(d.cluster ?? ""),
+        year: toNumber(d.year ?? year),
+      };
+    })
+    .filter((row) => countries.some((c) => c.iso2 === row.iso2))
+    .sort((a, b) => b.csi_score - a.csi_score)
+    .map((row, index) => ({
+      ...row,
+      rank: index + 1,
+    }));
 }
 
 export async function fetchSDGRankings(sdgId: number, year: number): Promise<SDGRankingRow[]> {
@@ -788,7 +903,7 @@ export async function fetchIndicatorData(
         );
 
         const rawData = safeArray<any>(response.data);
-        const dataPoints = rawData
+        const rawPoints = rawData
           .map((d: any) => ({
             year: parseInt(String(d.date ?? "").substring(0, 4), 10),
             value: toNumber(d.value),
@@ -798,13 +913,66 @@ export async function fetchIndicatorData(
           }))
           .filter((d) => Number.isFinite(d.year));
 
+        // Group points by year
+        const pointsMap = new Map<number, typeof rawPoints>();
+        rawPoints.forEach((p) => {
+          const list = pointsMap.get(p.year) || [];
+          list.push(p);
+          pointsMap.set(p.year, list);
+        });
+
+        const completePoints: typeof rawPoints = [];
+        let lastValidVal: number | null = null;
+        let lastValidConfLow: number | null = null;
+        let lastValidConfHigh: number | null = null;
+
+        for (let yr = 2015; yr <= 2035; yr++) {
+          const yrPoints = pointsMap.get(yr) || [];
+          
+          if (yrPoints.length > 0) {
+            // Prefer non-forecast
+            const bestPoint = yrPoints.find((p) => !p.is_forecast) ?? yrPoints[0];
+            
+            // Average of non-zero, non-null values for the year to handle duplicates and compute correct yearly value
+            const validVals = yrPoints.map((p) => p.value).filter((v) => v !== null && v !== 0);
+            
+            let val = bestPoint.value;
+            if (validVals.length > 0) {
+              val = validVals.reduce((a, b) => a + b, 0) / validVals.length;
+            }
+            
+            if (val !== 0 && val !== null) {
+              lastValidVal = val;
+              lastValidConfLow = bestPoint.conf_low;
+              lastValidConfHigh = bestPoint.conf_high;
+            }
+
+            completePoints.push({
+              year: yr,
+              value: (val === 0 || val === null) && lastValidVal !== null ? lastValidVal : (val ?? 0),
+              is_forecast: bestPoint.is_forecast,
+              conf_low: bestPoint.conf_low ?? lastValidConfLow,
+              conf_high: bestPoint.conf_high ?? lastValidConfHigh,
+            });
+          } else {
+            // Carry forward
+            completePoints.push({
+              year: yr,
+              value: lastValidVal ?? 0,
+              is_forecast: yr > 2024,
+              conf_low: lastValidConfLow,
+              conf_high: lastValidConfHigh,
+            });
+          }
+        }
+
         return {
           metricId: sdgId * 100 + idx + 1,
           metricKey: metric.key,
           metricName: metric.label,
           unit: metric.unit,
           direction: metric.higherIsBetter ? "higher_better" : "lower_better",
-          data: dataPoints,
+          data: completePoints,
         };
       } catch (err) {
         console.error(`Failed to fetch indicator data for ${dbMetricName}:`, err);
@@ -835,32 +1003,46 @@ export async function fetchMetricBenchmarkByCountryYear(
     countries.map(async (country) => {
       try {
         const response = await apiFetch<any>(
-          `/api/indicator/${dbMetricName}?country=${encodeURIComponent(country.name)}&start_year=${year}&end_year=${year}`
+          `/api/indicator/${dbMetricName}?country=${encodeURIComponent(country.name)}&start_year=2015&end_year=${year}`
         );
 
         const rawData = safeArray<any>(response.data);
+        const rawPoints = rawData
+          .map((d: any) => ({
+            year: parseInt(String(d.date ?? "").substring(0, 4), 10),
+            value: toNullableNumber(d.value),
+            is_forecast: Boolean(d.is_forecast ?? d.isforecast ?? false),
+          }))
+          .filter((d) => Number.isFinite(d.year));
 
-        // FIX: also accept forecast data if no historical point exists for this year
-        const exact =
-          rawData.find((d) => {
-            const pointYear = parseInt(String(d.date ?? "").substring(0, 4), 10);
-            const isForecast = Boolean(d.is_forecast ?? d.isforecast ?? false);
-            return pointYear === year && !isForecast;
-          }) ??
-          rawData.find((d) => {
-            const pointYear = parseInt(String(d.date ?? "").substring(0, 4), 10);
-            return pointYear === year;
-          });
+        // Group by year
+        const pointsByYear = new Map<number, typeof rawPoints>();
+        rawPoints.forEach((p) => {
+          const list = pointsByYear.get(p.year) || [];
+          list.push(p);
+          pointsByYear.set(p.year, list);
+        });
 
-        if (!exact) return null;
+        // Scan backwards starting from year down to 2015
+        let foundValue: number | null = null;
+        for (let yr = year; yr >= 2015; yr--) {
+          const yrPoints = pointsByYear.get(yr) || [];
+          if (yrPoints.length > 0) {
+            const validVals = yrPoints.map((p) => p.value).filter((v): v is number => v !== null && v !== 0);
+            if (validVals.length > 0) {
+              // Calculate average to resolve duplicate monthly values
+              foundValue = validVals.reduce((a, b) => a + b, 0) / validVals.length;
+              break;
+            }
+          }
+        }
 
-        const value = toNullableNumber(exact.value);
-        if (value === null) return null;
+        if (foundValue === null) return null;
 
         return {
           country: country.name,
           iso2: country.iso2,
-          value,
+          value: foundValue,
         } as MetricBenchmarkCountryValue;
       } catch {
         return null;
